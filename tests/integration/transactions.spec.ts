@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { TEST_CONFIG, createHeaders, generateActionId, newUserId } from './test-helpers';
 
 /**
@@ -11,9 +11,12 @@ import { TEST_CONFIG, createHeaders, generateActionId, newUserId } from './test-
 const { BASE_URL, ENDPOINT } = TEST_CONFIG;
 
 test.describe('Transaction Operations', () => {
-  test.skip('Scenario C: Single Bet (No Win)', async ({ request }) => {
+  test('Scenario C: Single Bet (No Win)', async ({ request, newUserWithBalance }) => {
+    const userId = await newUserWithBalance(5000);
+
+    const action_id = generateActionId('single-bet');
     const body = JSON.stringify({
-      user_id: '8|USDT|USD',
+      user_id: userId,
       currency: 'USD',
       game: 'acceptance:test',
       game_id: '1761032910245540510',
@@ -21,7 +24,7 @@ test.describe('Transaction Operations', () => {
       actions: [
         {
           action: 'bet',
-          action_id: '3b42f070-dab5-4d6c-8bc6-7241b68f00bd',
+          action_id,
           amount: 100,
         },
       ],
@@ -42,12 +45,12 @@ test.describe('Transaction Operations', () => {
     
     // Verify transaction
     expect(result.transactions).toHaveLength(1);
-    expect(result.transactions[0]).toHaveProperty('action_id', '3b42f070-dab5-4d6c-8bc6-7241b68f00bd');
+    expect(result.transactions[0]).toHaveProperty('action_id', action_id);
     expect(result.transactions[0]).toHaveProperty('tx_id');
     expect(result.transactions[0].tx_id).toBeTruthy();
     
     // Verify balance decreased
-    expect(typeof result.balance).toBe('number');
+    expect(result.balance).toBe(5000 - 100);
   });
 
   test.skip('Scenario D: Bet + Win in Same Request', async ({ request }) => {
@@ -209,35 +212,7 @@ test.describe('Transaction Operations', () => {
     }
   });
 
-  test.skip('Win-only transaction', async ({ request }) => {
-    const body = JSON.stringify({
-      user_id: '8|USDT|USD',
-      currency: 'USD',
-      game: 'acceptance:test',
-      game_id: generateActionId('win-only-game'),
-      actions: [
-        {
-          action: 'win',
-          action_id: generateActionId('win-only'),
-          amount: 1000,
-        },
-      ],
-    });
-
-    const response = await request.post(`${BASE_URL}${ENDPOINT}`, {
-      headers: createHeaders(body),
-      data: body,
-    });
-
-    expect(response.ok()).toBeTruthy();
-    const result = await response.json();
-    
-    expect(result.transactions).toHaveLength(1);
-    expect(result.transactions[0].tx_id).toBeTruthy();
-    expect(typeof result.balance).toBe('number');
-  });
-
-  test('Single Win for new user', async ({ request }) => {
+  test('Win-only transaction', async ({ request }) => {
     const userId = newUserId();
     
     const body = JSON.stringify({
