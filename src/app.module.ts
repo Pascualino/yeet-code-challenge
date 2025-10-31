@@ -3,6 +3,8 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AggregatorModule } from './aggregator/aggregator.module';
+import { DatabaseModule } from './database/database.module';
+import { RepositoriesModule } from './database/repositories.module';
 
 @Module({
   imports: [
@@ -10,6 +12,8 @@ import { AggregatorModule } from './aggregator/aggregator.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    DatabaseModule,
+    RepositoriesModule,
     AggregatorModule,
   ],
   controllers: [AppController],
