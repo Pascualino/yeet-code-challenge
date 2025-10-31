@@ -8,11 +8,11 @@ export default {
   out: './drizzle',
   dialect: 'postgresql',
   dbCredentials: {
-    host: process.env.DATABASE_HOST || 'localhost',
-    port: Number(process.env.DATABASE_PORT) || 5432,
-    user: process.env.DATABASE_USER || 'postgres',
-    password: process.env.DATABASE_PASSWORD || 'postgres',
-    database: process.env.DATABASE_NAME || 'yeet_casino',
+    host: process.env.DATABASE_HOST!,
+    port: Number(process.env.DATABASE_PORT!),
+    user: process.env.DATABASE_USER!,
+    password: process.env.DATABASE_PASSWORD!,
+    database: process.env.DATABASE_NAME!,
     ssl: false, // Would not use in a production environment, but being all local simplifies my life
   },
 } satisfies Config;
