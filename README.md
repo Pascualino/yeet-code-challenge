@@ -23,25 +23,58 @@
 
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Yeet Casino Bet Processor - A production-grade NestJS application for processing casino bets with HMAC authentication, idempotency, and RTP reporting.
 
-## Project setup
+## 🐳 Docker Setup (Recommended)
+
+The easiest way to run the project is using Docker Compose:
 
 ```bash
-$ npm install
+# Start services (API + Database when added)
+docker-compose up -d
+
+# Or use the helper script
+./scripts/docker-start.sh
+
+# View logs
+docker-compose logs -f api
+
+# Stop services
+docker-compose down
+
+# Or use the helper script
+./scripts/docker-stop.sh
 ```
 
-## Compile and run the project
+The API will be available at `http://localhost:3000`
+
+## Local Development Setup
+
+If you prefer to run locally without Docker:
+
+### Prerequisites
+- Node.js 20+ (required for NestJS 11)
+- PostgreSQL 16+ (when database is added)
+
+### Installation
 
 ```bash
-# development
-$ npm run start
+# Install dependencies
+npm install
+```
 
-# watch mode
-$ npm run start:dev
+### Running the Application
 
-# production mode
-$ npm run start:prod
+```bash
+# Development mode (with auto-reload)
+npm run start:dev
+
+# Production mode
+npm run build
+npm run start:prod
+
+# Debug mode
+npm run start:debug
 ```
 
 ## Run tests

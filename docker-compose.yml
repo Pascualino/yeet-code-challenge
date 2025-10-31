@@ -1,0 +1,60 @@
+services:
+  # NestJS API Service
+  api:
+    container_name: yeet-casino-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - HMAC_SECRET=test
+      # Database connection (will be used later)
+      # - DATABASE_URL=postgresql://postgres:postgres@db:5432/yeet_casino
+      # - DATABASE_HOST=db
+      # - DATABASE_PORT=5432
+      # - DATABASE_USER=postgres
+      # - DATABASE_PASSWORD=postgres
+      # - DATABASE_NAME=yeet_casino
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: npm run start:dev
+    networks:
+      - yeet-network
+    # depends_on:
+    #   - db
+    restart: unless-stopped
+
+  # PostgreSQL Database (commented out for now, uncomment when needed)
+  # db:
+  #   container_name: yeet-casino-db
+  #   image: postgres:16-alpine
+  #   ports:
+  #     - "5432:5432"
+  #   environment:
+  #     - POSTGRES_USER=postgres
+  #     - POSTGRES_PASSWORD=postgres
+  #     - POSTGRES_DB=yeet_casino
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   networks:
+  #     - yeet-network
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U postgres"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+networks:
+  yeet-network:
+    driver: bridge
+
+# Volumes (uncomment when database is added)
+# volumes:
+#   postgres_data:
+
