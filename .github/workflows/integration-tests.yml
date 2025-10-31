@@ -31,7 +31,7 @@ jobs:
 
       - name: Build and start Docker services
         run: |
-          docker-compose up -d --build
+          docker compose up -d --build
           echo "Waiting for services to be ready..."
 
       - name: Wait for API to be healthy
@@ -76,11 +76,11 @@ jobs:
         if: failure()
         run: |
           echo "=== API Logs ==="
-          docker-compose logs api
+          docker compose logs api
           echo "=== Docker PS ==="
           docker ps -a
 
       - name: Stop Docker services
         if: always()
-        run: docker-compose down -v
+        run: docker compose down -v
 

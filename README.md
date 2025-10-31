@@ -31,22 +31,24 @@ The easiest way to run the project is using Docker Compose:
 
 ```bash
 # Start services (API + Database when added)
-docker-compose up -d
+docker compose up -d
 
 # Or use the helper script
 ./scripts/docker-start.sh
 
 # View logs
-docker-compose logs -f api
+docker compose logs -f api
 
 # Stop services
-docker-compose down
+docker compose down
 
 # Or use the helper script
 ./scripts/docker-stop.sh
 ```
 
 The API will be available at `http://localhost:3000`
+
+**Note**: Use `docker compose` (Docker Compose V2) instead of `docker-compose` (V1).
 
 ## Local Development Setup
 
