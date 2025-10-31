@@ -1,7 +1,7 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as dotenv from 'dotenv';
-import { users } from './schema';
+import { actionsLedger, balances } from './schema';
 
 dotenv.config();
 
@@ -16,7 +16,16 @@ async function seed() {
 
   const db = drizzle(pool);
 
-  await db.insert(users).values({
+  await db.insert(actionsLedger).values({
+    id: 'seed-initial-win',
+    userId: '8|USDT|USD',
+    currency: 'USD',
+    amount: 74322001,
+    type: 'win',
+    actionId: 'seed-initial-win',
+  });
+
+  await db.insert(balances).values({
     userId: '8|USDT|USD',
     balance: 74322001,
   });
