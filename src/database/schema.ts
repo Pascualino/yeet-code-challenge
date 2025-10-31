@@ -6,7 +6,7 @@ export const actionsLedger = pgTable('actions_ledger', {
   id: uuid('id').primaryKey(),
   userId: varchar('user_id', { length: 255 }).notNull(),
   currency: varchar('currency', { length: 10 }).notNull(),
-  amount: bigint('amount', { mode: 'number' }).notNull(),
+  amount: bigint('amount', { mode: 'number' }),
   type: actionTypeEnum('type').notNull(),
   game: varchar('game', { length: 255 }),
   gameId: varchar('game_id', { length: 255 }),

@@ -7,7 +7,7 @@ docker exec yeet-casino-db psql -U postgres -d yeet_casino -c "TRUNCATE TABLE ac
 
 echo "✨ Database cleared"
 
-# Run seed script
+npm run db:push
 npm run db:seed
 
 echo "✅ Test database reset complete!"

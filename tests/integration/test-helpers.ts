@@ -58,3 +58,6 @@ export function createHeaders(body: string) {
   };
 }
 
+export function newUserId() {
+  return `${Math.floor(Math.random() * 1_000_000_000)}|USDT|USD`;
+}

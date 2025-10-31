@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { TEST_CONFIG, createHeaders, generateActionId } from './test-helpers';
+import { TEST_CONFIG, createHeaders, generateActionId, newUserId } from './test-helpers';
 
 /**
  * Acceptance Scenarios: C, D, F
@@ -235,6 +235,36 @@ test.describe('Transaction Operations', () => {
     expect(result.transactions).toHaveLength(1);
     expect(result.transactions[0].tx_id).toBeTruthy();
     expect(typeof result.balance).toBe('number');
+  });
+
+  test('Single Win for new user', async ({ request }) => {
+    const userId = newUserId();
+    
+    const body = JSON.stringify({
+      user_id: userId,
+      currency: 'USD',
+      game: 'acceptance:test',
+      game_id: generateActionId('new-user-game'),
+      actions: [
+        {
+          action: 'win',
+          action_id: generateActionId('new-user-win'),
+          amount: 5000,
+        },
+      ],
+    });
+
+    const response = await request.post(`${BASE_URL}${ENDPOINT}`, {
+      headers: createHeaders(body),
+      data: body,
+    });
+
+    expect(response.ok()).toBeTruthy();
+    const result = await response.json();
+    
+    expect(result.transactions).toHaveLength(1);
+    expect(result.transactions[0].tx_id).toBeTruthy();
+    expect(result.balance).toBe(5000);
   });
 });
 

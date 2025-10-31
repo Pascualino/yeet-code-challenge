@@ -19,11 +19,57 @@ export class AggregatorController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(HmacAuthGuard)
   async process(@Body() request: ProcessRequestDto): Promise<ProcessResponseDto> {
-    const balance = await this.ledgerService.getCurrentBalance(request.user_id);
+    console.log("request", request);
+    if (!request.actions || request.actions.length === 0) {
+      const balance = await this.ledgerService.getCurrentBalance(
+        request.user_id,
+      );
+      console.log("balance", balance);
+      return { balance };
+    }
+
+    const balanceDelta = this.calculateBalanceDelta(request.actions);
+
+    const ledgerActions = request.actions.map((action) => ({
+      id: crypto.randomUUID(),
+      userId: request.user_id,
+      currency: request.currency,
+      type: action.action,
+      game: request.game,
+      gameId: request.game_id,
+      actionId: action.action_id,
+      ...(action.action === 'rollback' ? { originalActionId: action.original_action_id } : {}),
+      ...(action.action === 'bet' || action.action === 'win' ? { amount: action.amount } : {}),
+    }));
+
+    const result = await this.ledgerService.performActions(
+      ledgerActions,
+      balanceDelta,
+    );
 
     return {
-      balance,
+      game_id: request.game_id!,
+      transactions: result.actions.map((action) => ({
+        action_id: action.actionId,
+        tx_id: action.id,
+      })),
+      balance: result.balance.balance,
     };
+  }
+
+  private calculateBalanceDelta(actions: ProcessRequestDto['actions']): number {
+    return actions!.reduce((total, action) => {
+      switch (action.action) {
+        case 'bet':
+          return total - action.amount;
+        case 'win':
+          return total + action.amount;
+        case 'rollback':
+          // TODO: Implement rollback logic
+        default:
+          return total;
+      }
+    }, 0);
   }
 }
 
