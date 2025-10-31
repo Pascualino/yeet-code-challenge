@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { TEST_CONFIG, createHeaders, generateActionId } from './test-helpers';
+import { generateActionId } from './test-helpers';
 
 /**
  * Acceptance Scenario B: Balance Lookup
@@ -7,23 +7,13 @@ import { TEST_CONFIG, createHeaders, generateActionId } from './test-helpers';
  * Tests balance-only requests (no actions array)
  */
 
-const { BASE_URL, ENDPOINT } = TEST_CONFIG;
-
 test.describe('Balance Operations', () => {
-  test('Scenario B: Balance Lookup - no actions', async ({ request }) => {
-    const body = JSON.stringify({
+  test('Scenario B: Balance Lookup - no actions', async ({ processActions }) => {
+    const result = await processActions({
       user_id: '8|USDT|USD',
       currency: 'USD',
       game: 'acceptance:test',
     });
-
-    const response = await request.post(`${BASE_URL}${ENDPOINT}`, {
-      headers: createHeaders(body),
-      data: body,
-    });
-
-    expect(response.ok()).toBeTruthy();
-    const result = await response.json();
     
     // Balance-only response format
     expect(result).toHaveProperty('balance');
@@ -31,45 +21,33 @@ test.describe('Balance Operations', () => {
     expect(result.balance).toBe(74322001);
   });
 
-  test.skip('Balance lookup with empty actions array', async ({ request }) => {
-    const body = JSON.stringify({
+  test('Balance lookup with empty actions array', async ({ processActions }) => {
+    const result = await processActions({
       user_id: '8|USDT|USD',
       currency: 'USD',
       game: 'acceptance:test',
       actions: [],
     });
-
-    const response = await request.post(`${BASE_URL}${ENDPOINT}`, {
-      headers: createHeaders(body),
-      data: body,
-    });
-
-    expect(response.ok()).toBeTruthy();
-    const result = await response.json();
     
     expect(result).toHaveProperty('balance');
-    expect(typeof result.balance).toBe('number');
+    expect(result.balance).toBe(74322001);
   });
 
-  test.skip('Balance consistency after operations', async ({ request }) => {
-    // Get initial balance
-    const balanceBody = JSON.stringify({
-      user_id: '8|USDT|USD',
+  test('Balance consistency after operations', async ({ newUserWithBalance, processActions }) => {
+    const userId = await newUserWithBalance(10_000);
+    
+    const result1 = await processActions({
+      user_id: userId,
       currency: 'USD',
       game: 'acceptance:test',
     });
-
-    const balanceResponse1 = await request.post(`${BASE_URL}${ENDPOINT}`, {
-      headers: createHeaders(balanceBody),
-      data: balanceBody,
-    });
-
-    const balance1 = (await balanceResponse1.json()).balance;
+    const balance1 = result1.balance;
+    expect(balance1).toBe(10_000);
 
     // Perform a bet operation
     const betAmount = 100;
-    const betBody = JSON.stringify({
-      user_id: '8|USDT|USD',
+    await processActions({
+      user_id: userId,
       currency: 'USD',
       game: 'acceptance:test',
       game_id: generateActionId('balance-consistency-test'),
@@ -82,21 +60,14 @@ test.describe('Balance Operations', () => {
       ],
     });
 
-    await request.post(`${BASE_URL}${ENDPOINT}`, {
-      headers: createHeaders(betBody),
-      data: betBody,
-    });
-
     // Check balance again
-    const balanceResponse2 = await request.post(`${BASE_URL}${ENDPOINT}`, {
-      headers: createHeaders(balanceBody),
-      data: balanceBody,
+    const result2 = await processActions({
+      user_id: userId,
+      currency: 'USD',
+      game: 'acceptance:test',
     });
 
-    const balance2 = (await balanceResponse2.json()).balance;
-
-    // Balance should have decreased by bet amount
-    expect(balance2).toBe(balance1 - betAmount);
+    expect(result2.balance).toBe(10_000 - betAmount);
   });
 });
 

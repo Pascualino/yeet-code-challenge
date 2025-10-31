@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { TEST_CONFIG, createHeaders, generateActionId, newUserId } from './test-helpers';
+import { generateActionId, newUserId } from './test-helpers';
 
 /**
  * Acceptance Scenarios: C, D, F
@@ -8,14 +8,12 @@ import { TEST_CONFIG, createHeaders, generateActionId, newUserId } from './test-
  * - Scenario F: Bet Then Win (Separate Calls)
  */
 
-const { BASE_URL, ENDPOINT } = TEST_CONFIG;
-
 test.describe('Transaction Operations', () => {
-  test('Scenario C: Single Bet (No Win)', async ({ request, newUserWithBalance }) => {
+  test('Scenario C: Single Bet (No Win)', async ({ newUserWithBalance, processActions }) => {
     const userId = await newUserWithBalance(5000);
 
     const action_id = generateActionId('single-bet');
-    const body = JSON.stringify({
+    const result = await processActions({
       user_id: userId,
       currency: 'USD',
       game: 'acceptance:test',
@@ -29,14 +27,6 @@ test.describe('Transaction Operations', () => {
         },
       ],
     });
-
-    const response = await request.post(`${BASE_URL}${ENDPOINT}`, {
-      headers: createHeaders(body),
-      data: body,
-    });
-
-    expect(response.ok()).toBeTruthy();
-    const result = await response.json();
     
     // Verify response structure
     expect(result).toHaveProperty('game_id', '1761032910245540510');
@@ -53,9 +43,11 @@ test.describe('Transaction Operations', () => {
     expect(result.balance).toBe(5000 - 100);
   });
 
-  test.skip('Scenario D: Bet + Win in Same Request', async ({ request }) => {
-    const body = JSON.stringify({
-      user_id: '8|USDT|USD',
+  test.skip('Scenario D: Bet + Win in Same Request', async ({ newUserWithBalance, processActions }) => {
+    const userId = await newUserWithBalance(10000);
+    
+    const result = await processActions({
+      user_id: userId,
       currency: 'USD',
       game: 'acceptance:test',
       game_id: '1761032910488163506',
@@ -72,14 +64,6 @@ test.describe('Transaction Operations', () => {
         },
       ],
     });
-
-    const response = await request.post(`${BASE_URL}${ENDPOINT}`, {
-      headers: createHeaders(body),
-      data: body,
-    });
-
-    expect(response.ok()).toBeTruthy();
-    const result = await response.json();
     
     // Verify response structure
     expect(result).toHaveProperty('game_id', '1761032910488163506');
@@ -97,15 +81,16 @@ test.describe('Transaction Operations', () => {
     expect(result.transactions[0].tx_id).not.toBe(result.transactions[1].tx_id);
     
     // Balance should reflect net change (+150: -100 bet + 250 win)
-    expect(typeof result.balance).toBe('number');
+    expect(result.balance).toBe(10000 + 150);
   });
 
-  test.skip('Scenario F: Bet Then Win (Separate Calls)', async ({ request }) => {
+  test.skip('Scenario F: Bet Then Win (Separate Calls)', async ({ newUserWithBalance, processActions }) => {
+    const userId = await newUserWithBalance(10000);
     const gameId = '1761032911166149146';
     
     // Step 1: Place bet
-    const betBody = JSON.stringify({
-      user_id: '8|USDT|USD',
+    const betResult = await processActions({
+      user_id: userId,
       currency: 'USD',
       game: 'acceptance:test',
       game_id: gameId,
@@ -117,14 +102,6 @@ test.describe('Transaction Operations', () => {
         },
       ],
     });
-
-    const betResponse = await request.post(`${BASE_URL}${ENDPOINT}`, {
-      headers: createHeaders(betBody),
-      data: betBody,
-    });
-
-    expect(betResponse.ok()).toBeTruthy();
-    const betResult = await betResponse.json();
     
     expect(betResult).toHaveProperty('game_id', gameId);
     expect(betResult.transactions).toHaveLength(1);
@@ -133,8 +110,8 @@ test.describe('Transaction Operations', () => {
     const balanceAfterBet = betResult.balance;
 
     // Step 2: Add win in separate call
-    const winBody = JSON.stringify({
-      user_id: '8|USDT|USD',
+    const winResult = await processActions({
+      user_id: userId,
       currency: 'USD',
       game: 'acceptance:test',
       game_id: gameId,
@@ -147,14 +124,6 @@ test.describe('Transaction Operations', () => {
         },
       ],
     });
-
-    const winResponse = await request.post(`${BASE_URL}${ENDPOINT}`, {
-      headers: createHeaders(winBody),
-      data: winBody,
-    });
-
-    expect(winResponse.ok()).toBeTruthy();
-    const winResult = await winResponse.json();
     
     expect(winResult).toHaveProperty('game_id', gameId);
     expect(winResult.transactions).toHaveLength(1);
@@ -164,28 +133,17 @@ test.describe('Transaction Operations', () => {
     expect(winResult.balance).toBe(balanceAfterBet + 700);
   });
 
-  test.skip('Multiple sequential bets', async ({ request }) => {
+  test.skip('Multiple sequential bets', async ({ newUserWithBalance, processActions }) => {
+    const userId = await newUserWithBalance(10000);
     const gameId = generateActionId('sequential-bets');
-    let currentBalance: number;
-
-    // Get initial balance
-    const balanceBody = JSON.stringify({
-      user_id: '8|USDT|USD',
-      currency: 'USD',
-      game: 'acceptance:test',
-    });
-    const balanceResponse = await request.post(`${BASE_URL}${ENDPOINT}`, {
-      headers: createHeaders(balanceBody),
-      data: balanceBody,
-    });
-    currentBalance = (await balanceResponse.json()).balance;
+    let currentBalance = 10000;
 
     // Place 3 sequential bets
     const betAmounts = [50, 75, 100];
     
     for (let i = 0; i < betAmounts.length; i++) {
-      const betBody = JSON.stringify({
-        user_id: '8|USDT|USD',
+      const betResult = await processActions({
+        user_id: userId,
         currency: 'USD',
         game: 'acceptance:test',
         game_id: `${gameId}-${i}`,
@@ -197,14 +155,6 @@ test.describe('Transaction Operations', () => {
           },
         ],
       });
-
-      const betResponse = await request.post(`${BASE_URL}${ENDPOINT}`, {
-        headers: createHeaders(betBody),
-        data: betBody,
-      });
-
-      expect(betResponse.ok()).toBeTruthy();
-      const betResult = await betResponse.json();
       
       // Verify balance decreased correctly
       expect(betResult.balance).toBe(currentBalance - betAmounts[i]);
@@ -212,10 +162,10 @@ test.describe('Transaction Operations', () => {
     }
   });
 
-  test('Win-only transaction', async ({ request }) => {
+  test('Win-only transaction', async ({ processActions }) => {
     const userId = newUserId();
     
-    const body = JSON.stringify({
+    const result = await processActions({
       user_id: userId,
       currency: 'USD',
       game: 'acceptance:test',
@@ -228,14 +178,6 @@ test.describe('Transaction Operations', () => {
         },
       ],
     });
-
-    const response = await request.post(`${BASE_URL}${ENDPOINT}`, {
-      headers: createHeaders(body),
-      data: body,
-    });
-
-    expect(response.ok()).toBeTruthy();
-    const result = await response.json();
     
     expect(result.transactions).toHaveLength(1);
     expect(result.transactions[0].tx_id).toBeTruthy();
