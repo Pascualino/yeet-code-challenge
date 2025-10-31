@@ -10,7 +10,7 @@ import { TEST_CONFIG, createHeaders } from './test-helpers';
 const { BASE_URL, ENDPOINT } = TEST_CONFIG;
 
 test.describe('Error Handling', () => {
-  test.skip('Scenario A: Missing Authorization → 403', async ({ request }) => {
+  test('Scenario A: Missing Authorization → 403', async ({ request }) => {
     const body = JSON.stringify({
       user_id: '8|USDT|USD',
       currency: 'USD',
@@ -25,9 +25,10 @@ test.describe('Error Handling', () => {
     });
 
     expect(response.status()).toBe(403);
+    expect((await response.json()).message).toContain('Missing Authorization header');
   });
 
-  test.skip('Scenario A: Invalid HMAC signature → 403', async ({ request }) => {
+  test('Scenario A: Invalid HMAC signature → 403', async ({ request }) => {
     const body = JSON.stringify({
       user_id: '8|USDT|USD',
       currency: 'USD',
@@ -42,6 +43,7 @@ test.describe('Error Handling', () => {
     });
 
     expect(response.status()).toBe(403);
+    expect((await response.json()).message).toContain('Invalid HMAC signature');
   });
 
   test.skip('Scenario E: Insufficient Funds', async ({ request }) => {
