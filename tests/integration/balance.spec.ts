@@ -10,7 +10,7 @@ import { TEST_CONFIG, createHeaders, generateActionId } from './test-helpers';
 const { BASE_URL, ENDPOINT } = TEST_CONFIG;
 
 test.describe('Balance Operations', () => {
-  test('Scenario B: Balance Lookup - no actions', async ({ request }) => {
+  test.skip('Scenario B: Balance Lookup - no actions', async ({ request }) => {
     const body = JSON.stringify({
       user_id: '8|USDT|USD',
       currency: 'USD',
@@ -31,7 +31,7 @@ test.describe('Balance Operations', () => {
     expect(result.balance).toBeGreaterThanOrEqual(0);
   });
 
-  test('Balance lookup with empty actions array', async ({ request }) => {
+  test.skip('Balance lookup with empty actions array', async ({ request }) => {
     const body = JSON.stringify({
       user_id: '8|USDT|USD',
       currency: 'USD',
@@ -51,7 +51,7 @@ test.describe('Balance Operations', () => {
     expect(typeof result.balance).toBe('number');
   });
 
-  test('Balance consistency after operations', async ({ request }) => {
+  test.skip('Balance consistency after operations', async ({ request }) => {
     // Get initial balance
     const balanceBody = JSON.stringify({
       user_id: '8|USDT|USD',

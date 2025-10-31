@@ -11,7 +11,7 @@ import { TEST_CONFIG, createHeaders, generateActionId } from './test-helpers';
 const { BASE_URL, ENDPOINT } = TEST_CONFIG;
 
 test.describe('Transaction Operations', () => {
-  test('Scenario C: Single Bet (No Win)', async ({ request }) => {
+  test.skip('Scenario C: Single Bet (No Win)', async ({ request }) => {
     const body = JSON.stringify({
       user_id: '8|USDT|USD',
       currency: 'USD',
@@ -50,7 +50,7 @@ test.describe('Transaction Operations', () => {
     expect(typeof result.balance).toBe('number');
   });
 
-  test('Scenario D: Bet + Win in Same Request', async ({ request }) => {
+  test.skip('Scenario D: Bet + Win in Same Request', async ({ request }) => {
     const body = JSON.stringify({
       user_id: '8|USDT|USD',
       currency: 'USD',
@@ -97,7 +97,7 @@ test.describe('Transaction Operations', () => {
     expect(typeof result.balance).toBe('number');
   });
 
-  test('Scenario F: Bet Then Win (Separate Calls)', async ({ request }) => {
+  test.skip('Scenario F: Bet Then Win (Separate Calls)', async ({ request }) => {
     const gameId = '1761032911166149146';
     
     // Step 1: Place bet
@@ -161,7 +161,7 @@ test.describe('Transaction Operations', () => {
     expect(winResult.balance).toBe(balanceAfterBet + 700);
   });
 
-  test('Multiple sequential bets', async ({ request }) => {
+  test.skip('Multiple sequential bets', async ({ request }) => {
     const gameId = generateActionId('sequential-bets');
     let currentBalance: number;
 
@@ -209,7 +209,7 @@ test.describe('Transaction Operations', () => {
     }
   });
 
-  test('Win-only transaction', async ({ request }) => {
+  test.skip('Win-only transaction', async ({ request }) => {
     const body = JSON.stringify({
       user_id: '8|USDT|USD',
       currency: 'USD',

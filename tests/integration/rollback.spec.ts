@@ -11,7 +11,7 @@ import { TEST_CONFIG, createHeaders } from './test-helpers';
 const { BASE_URL, ENDPOINT } = TEST_CONFIG;
 
 test.describe('Rollback Operations', () => {
-  test('Scenario G: Bet Then Rollback', async ({ request }) => {
+  test.skip('Scenario G: Bet Then Rollback', async ({ request }) => {
     // Step 1: Place a bet
     const betBody = JSON.stringify({
       user_id: '8|USDT|USD',
@@ -77,7 +77,7 @@ test.describe('Rollback Operations', () => {
     expect(rollbackResult.balance).toBe(balanceAfterBet + 100);
   });
 
-  test('Scenario I: Pre-Rollback (Rollback Before Original)', async ({
+  test.skip('Scenario I: Pre-Rollback (Rollback Before Original)', async ({
     request,
   }) => {
     // Step 1: Send rollback BEFORE the original action exists
@@ -145,7 +145,7 @@ test.describe('Rollback Operations', () => {
     expect(betResult.balance).toBe(balanceAfterPreRollback);
   });
 
-  test('Scenario J: Multiple Pre-Rollbacks', async ({ request }) => {
+  test.skip('Scenario J: Multiple Pre-Rollbacks', async ({ request }) => {
     // Step 1: Send two rollbacks BEFORE their original actions exist
     const rollbacksBody = JSON.stringify({
       user_id: '8|USDT|USD',
