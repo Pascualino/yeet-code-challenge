@@ -1,4 +1,5 @@
-import { pgTable, varchar, bigint, uuid, timestamp, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, bigint, uuid, timestamp, pgEnum, check } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 export const actionTypeEnum = pgEnum('action_type', ['bet', 'win', 'rollback']);
 
@@ -18,7 +19,9 @@ export const actionsLedger = pgTable('actions_ledger', {
 export const balances = pgTable('balances', {
   userId: varchar('user_id', { length: 255 }).primaryKey(),
   balance: bigint('balance', { mode: 'number' }).notNull().default(0),
-});
+}, (table) => ({
+  balanceNonNegative: check('balance_non_negative', sql`balance >= 0`),
+}));
 
 export type ActionLedgerEntry = typeof actionsLedger.$inferSelect;
 export type NewActionLedgerEntry = typeof actionsLedger.$inferInsert;

@@ -10,6 +10,7 @@ import {
   NewActionLedgerEntry,
   Balance,
 } from './schema';
+import { InsufficientFundsException } from 'src/aggregator/exceptions/insufficient-funds.exception';
 
 @Injectable()
 export class LedgerService {
@@ -37,19 +38,34 @@ export class LedgerService {
     }
 
     return await this.db.transaction(async (tx) => {
+      const currentBalanceResult = await tx
+        .select()
+        .from(balances)
+        .where(eq(balances.userId, userId))
+        .for('update');
+
+      const currentBalance = currentBalanceResult[0]?.balance ?? 0;
+      const newBalance = currentBalance + balanceDelta;
+
+      if (newBalance < 0) {
+        throw new InsufficientFundsException();
+      }
+
       const insertedActions = await tx
         .insert(actionsLedger)
         .values(actions)
         .returning();
 
-      const updatedBalance = await tx
-        .insert(balances)
-        .values({ userId, balance: balanceDelta })
-        .onConflictDoUpdate({
-          target: balances.userId,
-          set: { balance: sql`${balances.balance} + ${balanceDelta}` },
-        })
-        .returning();
+      const updatedBalance = currentBalanceResult[0]
+        ? await tx
+            .update(balances)
+            .set({ balance: newBalance })
+            .where(eq(balances.userId, userId))
+            .returning()
+        : await tx
+            .insert(balances)
+            .values({ userId, balance: newBalance })
+            .returning();
 
       return {
         actions: insertedActions,
