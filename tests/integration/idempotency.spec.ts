@@ -11,12 +11,13 @@ import { generateActionId } from './test-helpers';
  */
 
 test.describe('Idempotency', () => {
-  test.skip('Scenario H: Duplicate Action ID - same request resubmission', async ({
+  test('Scenario H: Duplicate Action ID - same request resubmission', async ({
     newUserWithBalance,
     processActions,
   }) => {
     const userId = await newUserWithBalance(10000);
     
+    const actionId = generateActionId('idempotency-action-id');
     const requestParams = {
       user_id: userId,
       currency: 'USD',
@@ -25,7 +26,7 @@ test.describe('Idempotency', () => {
       actions: [
         {
           action: 'bet' as const,
-          action_id: 'f61c5eba-fb26-4070-89b5-c3a2edf54c02',
+          action_id: actionId,
           amount: 100,
         },
       ],
@@ -36,29 +37,28 @@ test.describe('Idempotency', () => {
     
     expect(result1).toHaveProperty('balance');
     expect(result1.transactions).toHaveLength(1);
-    expect(result1.transactions[0].action_id).toBe('f61c5eba-fb26-4070-89b5-c3a2edf54c02');
+    expect(result1.transactions[0].action_id).toBe(actionId);
     
     const originalTxId = result1.transactions[0].tx_id;
     const balanceAfterFirst = result1.balance;
+    expect(balanceAfterFirst).toBe(10000 - 100);
 
     // Second submission (duplicate)
     const result2 = await processActions(requestParams);
-    
-    // Should return same tx_id
+  
     expect(result2.transactions).toHaveLength(1);
     expect(result2.transactions[0].tx_id).toBe(originalTxId);
     
-    // Balance should not change
     expect(result2.balance).toBe(balanceAfterFirst);
   });
 
-  test.skip('Scenario H: Duplicate + New Action ID in same request', async ({
+  test('Scenario H: Duplicate + New Action ID in same request', async ({
     newUserWithBalance,
     processActions,
   }) => {
     const userId = await newUserWithBalance(10000);
     
-    // First request: single bet
+    const duplicateActionId = generateActionId('duplicate-test-action-id');
     const firstResult = await processActions({
       user_id: userId,
       currency: 'USD',
@@ -67,7 +67,7 @@ test.describe('Idempotency', () => {
       actions: [
         {
           action: 'bet',
-          action_id: 'duplicate-test-action-id',
+          action_id: duplicateActionId,
           amount: 100,
         },
       ],
@@ -77,6 +77,7 @@ test.describe('Idempotency', () => {
     const balanceAfterFirst = firstResult.balance;
 
     // Second request: duplicate action + new action
+    const newActionId = generateActionId('new-test-action-id');
     const secondResult = await processActions({
       user_id: userId,
       currency: 'USD',
@@ -85,12 +86,12 @@ test.describe('Idempotency', () => {
       actions: [
         {
           action: 'bet',
-          action_id: 'duplicate-test-action-id', // Duplicate
+          action_id: duplicateActionId,
           amount: 100,
         },
         {
           action: 'bet',
-          action_id: 'd94b2fa5-e87f-4d8e-9a01-4a443ed5c11c', // New
+          action_id: newActionId,
           amount: 50,
         },
       ],
@@ -100,11 +101,11 @@ test.describe('Idempotency', () => {
     expect(secondResult.transactions).toHaveLength(2);
     
     // First transaction: duplicate, should have original tx_id
-    expect(secondResult.transactions[0].action_id).toBe('duplicate-test-action-id');
+    expect(secondResult.transactions[0].action_id).toBe(duplicateActionId);
     expect(secondResult.transactions[0].tx_id).toBe(originalTxId);
     
     // Second transaction: new, should have new tx_id
-    expect(secondResult.transactions[1].action_id).toBe('d94b2fa5-e87f-4d8e-9a01-4a443ed5c11c');
+    expect(secondResult.transactions[1].action_id).toBe(newActionId);
     expect(secondResult.transactions[1].tx_id).toBeTruthy();
     expect(secondResult.transactions[1].tx_id).not.toBe(originalTxId);
     
@@ -112,7 +113,7 @@ test.describe('Idempotency', () => {
     expect(secondResult.balance).toBe(balanceAfterFirst - 50);
   });
 
-  test.skip('Idempotency with wins', async ({ newUserWithBalance, processActions }) => {
+  test('Idempotency with wins', async ({ newUserWithBalance, processActions }) => {
     const userId = await newUserWithBalance(10000);
     const actionId = generateActionId('idempotent-win-test');
     

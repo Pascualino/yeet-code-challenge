@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { eq, sql } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DATABASE_CONNECTION } from './database.module';
 import * as schema from './schema';
@@ -30,7 +30,6 @@ export class LedgerService {
 
   async performActions(
     actions: NewActionLedgerEntry[],
-    balanceDelta: number,
   ): Promise<{ actions: ActionLedgerEntry[]; balance: Balance }> {
     const userId = actions[0].userId;
     if (actions.some((action) => action.userId !== userId)) {
@@ -38,6 +37,31 @@ export class LedgerService {
     }
 
     return await this.db.transaction(async (tx) => {
+      const actionIds = actions.map((a) => a.actionId);
+      const existingActions = await tx
+              .select()
+              .from(actionsLedger)
+              .where(inArray(actionsLedger.actionId, actionIds));
+      const existingActionIds = new Set(
+        existingActions.map((a) => a.actionId),
+      );
+
+      // Separate new actions from existing ones
+      const newActions = actions.filter(
+        (a) => !existingActionIds.has(a.actionId),
+      );
+
+      // Calculate balance delta only for new actions
+      const newActionsDelta = newActions.reduce((total, action) => {
+        if (action.type === 'bet') {
+          return total - action.amount!;
+        } else if (action.type === 'win') {
+          return total + action.amount!;
+        }
+        // TODO: Handle rollback
+        return total;
+      }, 0);
+
       const currentBalanceResult = await tx
         .select()
         .from(balances)
@@ -45,30 +69,39 @@ export class LedgerService {
         .for('update');
 
       const currentBalance = currentBalanceResult[0]?.balance ?? 0;
-      const newBalance = currentBalance + balanceDelta;
+      const newBalance = currentBalance + newActionsDelta;
 
       if (newBalance < 0) {
         throw new InsufficientFundsException();
       }
 
-      const insertedActions = await tx
-        .insert(actionsLedger)
-        .values(actions)
-        .returning();
+      const insertedActions = newActions.length > 0 ? await tx.insert(actionsLedger).values(newActions).returning() : [];
 
       const updatedBalance = currentBalanceResult[0]
-        ? await tx
-            .update(balances)
-            .set({ balance: newBalance })
-            .where(eq(balances.userId, userId))
-            .returning()
-        : await tx
-            .insert(balances)
-            .values({ userId, balance: newBalance })
-            .returning();
+      ? await tx
+          .update(balances)
+          .set({ balance: newBalance })
+          .where(eq(balances.userId, userId))
+          .returning()
+      : await tx
+          .insert(balances)
+          .values({ userId, balance: newBalance })
+          .returning();
+
+      const allActions = actions.map((requestedAction) => {
+        const existing = existingActions.find(
+          (e) => e.actionId === requestedAction.actionId,
+        );
+        if (existing) {
+          return existing;
+        }
+        return insertedActions.find(
+          (i) => i.actionId === requestedAction.actionId,
+        )!;
+      });
 
       return {
-        actions: insertedActions,
+        actions: allActions,
         balance: updatedBalance[0],
       };
     });

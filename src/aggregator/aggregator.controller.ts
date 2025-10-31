@@ -28,8 +28,6 @@ export class AggregatorController {
       return { balance };
     }
 
-    const balanceDelta = this.calculateBalanceDelta(request.actions);
-
     const ledgerActions = request.actions.map((action) => ({
       id: crypto.randomUUID(),
       userId: request.user_id,
@@ -44,7 +42,6 @@ export class AggregatorController {
 
     const result = await this.ledgerService.performActions(
       ledgerActions,
-      balanceDelta,
     );
 
     return {
@@ -55,21 +52,6 @@ export class AggregatorController {
       })),
       balance: result.balance.balance,
     };
-  }
-
-  private calculateBalanceDelta(actions: ProcessRequestDto['actions']): number {
-    return actions!.reduce((total, action) => {
-      switch (action.action) {
-        case 'bet':
-          return total - action.amount;
-        case 'win':
-          return total + action.amount;
-        case 'rollback':
-          // TODO: Implement rollback logic
-        default:
-          return total;
-      }
-    }, 0);
   }
 }
 
