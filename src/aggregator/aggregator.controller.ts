@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import { HmacAuthGuard } from './hmac-auth.guard';
 import { UsersRepository } from '../database/users.repository';
+import type { ProcessRequestDto } from './dto/process-request.dto';
+import type { ProcessResponseDto } from './dto/process-response.dto';
 
 @Controller('aggregator/takehome')
 export class AggregatorController {
@@ -16,16 +18,11 @@ export class AggregatorController {
   @Post('process')
   @HttpCode(HttpStatus.OK)
   @UseGuards(HmacAuthGuard)
-  async process(@Body() body: any) {
-    // Get or create user
-    const user = await this.usersRepository.createOrGetUser(
-      body.user_id || '8|USDT|USD',
-    );
+  async process(@Body() request: ProcessRequestDto): Promise<ProcessResponseDto> {
+    const user = await this.usersRepository.createOrGetUser(request.user_id);
 
-    // For now, return the user's balance
     return {
       balance: user.balance,
-      user_id: user.userId,
     };
   }
 }
