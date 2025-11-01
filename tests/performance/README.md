@@ -37,6 +37,11 @@ k6 run --env BASE_URL=http://localhost:3000 --env HMAC_SECRET=test tests/perform
 k6 run --env BASE_URL=http://localhost:3000 --env HMAC_SECRET=test --env LOAD_PROFILE=easy tests/performance/process-endpoint.js
 k6 run --env BASE_URL=http://localhost:3000 --env HMAC_SECRET=test --env LOAD_PROFILE=mid tests/performance/process-endpoint.js
 k6 run --env BASE_URL=http://localhost:3000 --env HMAC_SECRET=test --env LOAD_PROFILE=hard tests/performance/process-endpoint.js
+
+# Run RTP endpoint tests
+npm run test:performance:rtp              # easy profile
+npm run test:performance:rtp:mid         # mid profile
+npm run test:performance:rtp:hard        # hard profile
 ```
 
 ### With Docker (recommended for CI)
@@ -59,9 +64,18 @@ Tests the `/aggregator/takehome/process` endpoint with:
 - Single bet actions
 - Bet + Win in same request
 
+### RTP Endpoint (`rtp-endpoint.js`)
+
+Tests the casino-wide RTP report endpoint:
+- Casino-wide RTP: `GET /aggregator/takehome/rtp`
+
+Tested with time-bounded queries (24 hours ago to 24 hours from now).
+
 **Load Profiles:**
 
-The test configuration is extracted to `config.js` with three presets:
+The test configuration is extracted to `config.js` with separate presets for each endpoint type:
+
+### Process Endpoint Load Profiles
 
 1. **Easy** (default, used in CI/CD):
    - 10 → 50 concurrent users
@@ -74,6 +88,24 @@ The test configuration is extracted to `config.js` with three presets:
 3. **Hard**:
    - 1,000 → 5,000 concurrent users
    - ~3.5 minutes total duration
+
+### RTP Endpoint Load Profiles
+
+RTP endpoints have **much lower traffic** due to the resource-intensive nature of aggregation queries:
+
+1. **Easy** (default, used in CI/CD):
+   - 2 → 5 concurrent users
+   - ~1.5 minutes total duration
+   
+2. **Mid**:
+   - 5 → 10 concurrent users
+   - ~2.5 minutes total duration
+
+3. **Hard**:
+   - 10 → 25 concurrent users
+   - ~3.5 minutes total duration
+
+**Note:** RTP endpoints also have higher latency thresholds (p95<1000ms, p99<2000ms) due to the aggregation workload.
 
 **Thresholds:**
 - 95% of requests complete in < 500ms

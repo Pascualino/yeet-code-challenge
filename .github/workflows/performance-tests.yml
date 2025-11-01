@@ -66,9 +66,9 @@ jobs:
       - name: Install jq for metrics parsing
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Run K6 performance tests
+      - name: Run K6 performance tests (Process endpoint)
         run: |
-          echo "🚀 Starting K6 performance test"
+          echo "🚀 Starting K6 performance test - Process endpoint"
           echo "   BASE_URL: $BASE_URL"
           echo "   LOAD_PROFILE: $LOAD_PROFILE"
           echo ""
@@ -79,15 +79,32 @@ jobs:
             -e HMAC_SECRET="$HMAC_SECRET" \
             -e LOAD_PROFILE="$LOAD_PROFILE" \
             grafana/k6 run \
-            --out json=results.json \
+            --out json=results-process.json \
             /scripts/tests/performance/process-endpoint.js
+
+      - name: Run K6 performance tests (RTP endpoint)
+        run: |
+          echo "🚀 Starting K6 performance test - RTP endpoint"
+          echo "   BASE_URL: $BASE_URL"
+          echo "   LOAD_PROFILE: $LOAD_PROFILE"
+          echo ""
+          
+          docker run --rm -i --network host \
+            -v $(pwd):/scripts \
+            -e BASE_URL="$BASE_URL" \
+            -e LOAD_PROFILE="$LOAD_PROFILE" \
+            grafana/k6 run \
+            --out json=results-rtp.json \
+            /scripts/tests/performance/rtp-endpoint.js || true
 
       - name: Upload K6 results
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: k6-results
-          path: results.json
+          path: |
+            results-process.json
+            results-rtp.json
           retention-days: 90
 
       - name: Display performance summary
@@ -96,18 +113,25 @@ jobs:
           echo "## Performance Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          if [ -f results.json ]; then
-            echo "### Key Metrics" >> $GITHUB_STEP_SUMMARY
+          # Function to extract and display metrics from a results file
+          display_metrics() {
+            local file=$1
+            local title=$2
+            
+            if [ ! -f "$file" ]; then
+              echo "⚠️ $title: No results file found" >> $GITHUB_STEP_SUMMARY
+              return
+            fi
+            
+            echo "### $title" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             
-            # Try to extract key metrics from JSON results
             if command -v jq &> /dev/null; then
-              # K6 JSON output structure may vary, try to extract what we can
-              REQUESTS=$(jq -r '.metrics.http_reqs.values.count // .metrics.http_reqs.values.count // "N/A"' results.json 2>/dev/null || echo "N/A")
-              RATE=$(jq -r '.metrics.http_reqs.values.rate // .metrics.http_reqs.values.rate // "N/A"' results.json 2>/dev/null || echo "N/A")
-              P95=$(jq -r '.metrics.http_req_duration.values["p(95)"] // .metrics.http_req_duration.values.p95 // "N/A"' results.json 2>/dev/null || echo "N/A")
-              P99=$(jq -r '.metrics.http_req_duration.values["p(99)"] // .metrics.http_req_duration.values.p99 // "N/A"' results.json 2>/dev/null || echo "N/A")
-              ERROR_RATE=$(jq -r '.metrics.http_req_failed.values.rate // "N/A"' results.json 2>/dev/null || echo "N/A")
+              REQUESTS=$(jq -r '.metrics.http_reqs.values.count // "N/A"' "$file" 2>/dev/null || echo "N/A")
+              RATE=$(jq -r '.metrics.http_reqs.values.rate // "N/A"' "$file" 2>/dev/null || echo "N/A")
+              P95=$(jq -r '.metrics.http_req_duration.values["p(95)"] // .metrics.http_req_duration.values.p95 // "N/A"' "$file" 2>/dev/null || echo "N/A")
+              P99=$(jq -r '.metrics.http_req_duration.values["p(99)"] // .metrics.http_req_duration.values.p99 // "N/A"' "$file" 2>/dev/null || echo "N/A")
+              ERROR_RATE=$(jq -r '.metrics.http_req_failed.values.rate // "N/A"' "$file" 2>/dev/null || echo "N/A")
               
               echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
               echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
@@ -116,17 +140,15 @@ jobs:
               echo "| p95 Latency | $P95 ms |" >> $GITHUB_STEP_SUMMARY
               echo "| p99 Latency | $P99 ms |" >> $GITHUB_STEP_SUMMARY
               echo "| Error Rate | $ERROR_RATE |" >> $GITHUB_STEP_SUMMARY
-            else
-              echo "⚠️ jq not installed - install for detailed metrics parsing" >> $GITHUB_STEP_SUMMARY
               echo "" >> $GITHUB_STEP_SUMMARY
-              echo "Raw results (first 50 lines):" >> $GITHUB_STEP_SUMMARY
-              echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
-              head -50 results.json >> $GITHUB_STEP_SUMMARY
-              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "⚠️ jq not installed - cannot parse detailed metrics" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
             fi
-          else
-            echo "⚠️ No results file generated. Check logs above for errors." >> $GITHUB_STEP_SUMMARY
-          fi
+          }
+          
+          display_metrics "results-process.json" "Process Endpoint"
+          display_metrics "results-rtp.json" "RTP Endpoint"
 
       - name: Show Docker logs on failure
         if: failure()

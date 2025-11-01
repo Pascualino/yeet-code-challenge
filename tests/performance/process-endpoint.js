@@ -2,14 +2,13 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Rate, Trend } from 'k6/metrics';
 import { BASE_URL, ENDPOINT, createHeaders, randomUserId, randomActionId } from './utils.js';
-import { getConfig } from './config.js';
+import { getProcessConfig } from './config.js';
 
 // Custom metrics
 const errorRate = new Rate('errors');
 const errorStatusTrend = new Trend('error_status');
 
-// Load configuration from preset (easy/mid/hard)
-export const options = getConfig();
+export const options = getProcessConfig();
 
 export default function () {
   const userId = randomUserId();
