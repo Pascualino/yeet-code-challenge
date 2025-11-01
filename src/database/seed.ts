@@ -24,6 +24,7 @@ async function seed() {
     amount: 74322001,
     type: 'win',
     actionId: 'seed-initial-win',
+    gameId: 'initial-balance',
   });
 
   await db.insert(balances).values({

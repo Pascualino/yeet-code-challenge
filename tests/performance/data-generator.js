@@ -1,11 +1,10 @@
-import { sleep } from 'k6';
 import http from 'k6/http';
 import { BASE_URL, ENDPOINT, createHeaders, randomActionId, randomUserId } from './utils.js';
 
 // Configuration: number of virtual users and ramp-up
 export const options = {
   stages: [
-    { duration: '3m', target: 2000 },
+    { duration: '2m', target: 1000 },
     { duration: '10s', target: 0 },
   ],
   thresholds: {
@@ -22,10 +21,12 @@ export function setup() {
 // Main function: Each VU simulates a user playing games
 export default function () {
   const userId = randomUserId();
-  const numGames = 100;
-  const initialBalance = 500; // $500 starting balance
+  const numGames = 900 + Math.floor(Math.random() * 101); // 900-1000 games
+  const initialBalance = 1000; // $1000 starting balance
+  const betAmount = 10;
+  const gameName = `flipping-coin-game`;
   
-  // Give user initial balance with a win (excluded from RTP via special game_id)
+  // Step 1: Give user initial balance with a win (excluded from RTP via special game_id)
   const setupBody = JSON.stringify({
     user_id: userId,
     currency: 'USD',
@@ -50,78 +51,52 @@ export default function () {
     throw new Error(`Setup failed for ${userId}: ${setupResponse.status}`);
   }
 
-  // Play games
+  // Step 2: Generate all game actions (bets + wins) for batch processing
+  const allActions = [];
+  let totalBalance = initialBalance;
   for (let gameNum = 0; gameNum < numGames; gameNum++) {
-    const betAmount = 10;
-    const gameId = randomActionId();
-    const gameName = `flipping-coin-game`;
-    
-    // Place bet
-    const betBody = JSON.stringify({
-      user_id: userId,
-      currency: 'USD',
-      game: gameName,
-      game_id: gameId,
-      actions: [
-        {
-          action: 'bet',
-          action_id: randomActionId(),
-          amount: betAmount,
-        },
-      ],
-    });
-
-    const betResponse = http.post(
-      `${BASE_URL}${ENDPOINT}`,
-      betBody,
-      { headers: createHeaders(betBody) }
-    );
-
-    if (betResponse.status !== 200) {
-      // User might be out of funds, skip remaining games
-      if (betResponse.status === 400) {
-        const body = JSON.parse(betResponse.body);
-        if (body.code === 100) {
-          console.log(`💰 User ${userId} ran out of funds after ${gameNum} games`);
-          break;
-        }
-      }
-      throw new Error(`Bet failed for ${userId} game ${gameNum + 1}: ${betResponse.status}`);
+    if(betAmount > totalBalance) {
+      break;
     }
+    totalBalance -= betAmount;
+    // Always place a bet
+    allActions.push({
+      action: 'bet',
+      action_id: randomActionId(),
+      amount: betAmount,
+    });
 
     // Determine win/loss: 47.5% chance to win, 52.5% chance to lose
     const won = Math.random() < 0.475;
     
     if (won) {
       // Win: double the bet
-      const winBody = JSON.stringify({
-        user_id: userId,
-        currency: 'USD',
-        game: gameName,
-        game_id: gameId,
-        finished: true,
-        actions: [
-          {
-            action: 'win',
-            action_id: randomActionId(),
-            amount: betAmount * 2,
-          },
-        ],
+      allActions.push({
+        action: 'win',
+        action_id: randomActionId(),
+        amount: betAmount * 2,
       });
-
-      const winResponse = http.post(
-        `${BASE_URL}${ENDPOINT}`,
-        winBody,
-        { headers: createHeaders(winBody) }
-      );
-
-      if (winResponse.status !== 200) {
-        throw new Error(`Win failed for ${userId} game ${gameNum + 1}: ${winResponse.status}`);
-      }
+      totalBalance += betAmount * 2;
     }
+  }
 
-    // Small delay between games
-    sleep(0.1 + Math.random() * 0.2);
+  // Step 3: Send all actions in a single batch request
+  const batchBody = JSON.stringify({
+    user_id: userId,
+    currency: 'USD',
+    game: gameName,
+    finished: true,
+    actions: allActions,
+  });
+
+  const batchResponse = http.post(
+    `${BASE_URL}${ENDPOINT}`,
+    batchBody,
+    { headers: createHeaders(batchBody) }
+  );
+
+  if (batchResponse.status !== 200) {
+    throw new Error(`Batch game processing failed for ${userId}: ${batchResponse.status} - ${batchResponse.body.substring(0, 200)}`);
   }
 }
 
