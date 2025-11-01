@@ -9,6 +9,7 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
+import * as crypto from 'crypto';
 import { HmacAuthGuard } from './hmac-auth.guard';
 import { LedgerService } from '../database/ledger.service';
 import type { ProcessRequestDto } from './dto/process-request.dto';
