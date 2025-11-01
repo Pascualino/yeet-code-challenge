@@ -5,12 +5,11 @@ import { BASE_URL, ENDPOINT, createHeaders, randomActionId, randomUserId } from 
 // Configuration: number of virtual users and ramp-up
 export const options = {
   stages: [
-    { duration: '10s', target: 50 },   // Ramp up to 50 concurrent users
-    { duration: '20s', target: 50 },    // Stay at 50 users for 2 minutes
-    { duration: '10s', target: 0 },    // Ramp down
+    { duration: '3m', target: 2000 },
+    { duration: '10s', target: 0 },
   ],
   thresholds: {
-    http_req_failed: ['rate<0.05'],    // Allow up to 5% errors (users may run out of funds)
+    http_req_failed: ['rate<0.05'],
   },
 };
 
@@ -23,15 +22,15 @@ export function setup() {
 // Main function: Each VU simulates a user playing games
 export default function () {
   const userId = randomUserId();
-  const numGames = Math.floor(Math.random() * 10) + 1; // 1-10 games
-  const initialBalance = 500 + Math.floor(Math.random() * 500); // $500-$1000 starting balance
+  const numGames = 100;
+  const initialBalance = 500; // $500 starting balance
   
-  // Give user initial balance with a win
+  // Give user initial balance with a win (excluded from RTP via special game_id)
   const setupBody = JSON.stringify({
     user_id: userId,
     currency: 'USD',
     game: 'gen:setup',
-    game_id: randomActionId(),
+    game_id: 'initial-balance', // Special game_id to exclude from RTP calculations
     actions: [
       {
         action: 'win',
@@ -48,15 +47,14 @@ export default function () {
   );
 
   if (setupResponse.status !== 200) {
-    console.error(`Setup failed for ${userId}: ${setupResponse.status}`);
-    return;
+    throw new Error(`Setup failed for ${userId}: ${setupResponse.status}`);
   }
 
   // Play games
   for (let gameNum = 0; gameNum < numGames; gameNum++) {
-    const betAmount = 10 + Math.floor(Math.random() * 91); // $10-$100
+    const betAmount = 10;
     const gameId = randomActionId();
-    const gameName = `gen:game-${gameNum + 1}`;
+    const gameName = `flipping-coin-game`;
     
     // Place bet
     const betBody = JSON.stringify({
@@ -88,7 +86,7 @@ export default function () {
           break;
         }
       }
-      continue;
+      throw new Error(`Bet failed for ${userId} game ${gameNum + 1}: ${betResponse.status}`);
     }
 
     // Determine win/loss: 47.5% chance to win, 52.5% chance to lose
@@ -118,7 +116,7 @@ export default function () {
       );
 
       if (winResponse.status !== 200) {
-        console.error(`Win failed for ${userId} game ${gameNum + 1}: ${winResponse.status}`);
+        throw new Error(`Win failed for ${userId} game ${gameNum + 1}: ${winResponse.status}`);
       }
     }
 

@@ -25,12 +25,10 @@ export class AggregatorController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(HmacAuthGuard)
   async process(@Body() request: ProcessRequestDto): Promise<ProcessResponseDto> {
-    console.log("request", request);
     if (!request.actions || request.actions.length === 0) {
       const balance = await this.ledgerService.getCurrentBalance(
         request.user_id,
       );
-      console.log("balance", balance);
       return { balance };
     }
 

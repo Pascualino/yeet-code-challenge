@@ -18,6 +18,8 @@ Hello dear reviewer! And welcome to this window to my brain, I hope you enjoy it
 
 * On the same RTP report endpoint, if the denominator (total_bet) is 0, we return `null` for RTP
 
+* For the RTP and game simulation, I needed users to have some initial balance which was excluded from the RTP calculation. As I wanted the initial balance to be also dynamic and random, I set up an "initial-balance" gameId value which is excluded from RTP calculations
+
 * I've assumed we will not have a huge number of actions sent on a single `/process` endpoint call. I've therefore prioritized readability vs optimizing for large `/process` payloads
 
 * All actions in a /process call are executed at the same time. That means that even if a first "action" in a batch is a bet that would put the user under 0, but there's a win action later **in the same batch call*** that puts them above 0 again, we don't fail and it's a valid use case.

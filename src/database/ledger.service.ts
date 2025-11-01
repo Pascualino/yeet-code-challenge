@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, between, sql } from 'drizzle-orm';
+import { eq, and, between, sql, ne, or, isNull } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DATABASE_CONNECTION } from './database.module';
 import * as schema from './schema';
@@ -63,6 +63,11 @@ export class LedgerService {
         and(
           eq(actionsLedger.userId, userId),
           between(actionsLedger.createdAt, from, to),
+          // Exclude initial balance transactions
+          or(
+            ne(actionsLedger.gameId, 'initial-balance'),
+            isNull(actionsLedger.gameId),
+          ),
         ),
       )
       .limit(1);
@@ -113,7 +118,16 @@ export class LedgerService {
           total_win: sql<string>`COALESCE(SUM(CASE WHEN ${actionsLedger.type} = 'win' THEN ${actionsLedger.amount} ELSE 0 END), 0)::text`,
         })
         .from(actionsLedger)
-        .where(between(actionsLedger.createdAt, from, to))
+        .where(
+          and(
+            between(actionsLedger.createdAt, from, to),
+            // Exclude initial balance transactions
+            or(
+              ne(actionsLedger.gameId, 'initial-balance'),
+              isNull(actionsLedger.gameId),
+            ),
+          ),
+        )
         .groupBy(actionsLedger.userId, actionsLedger.currency);
 
     return results.map((row) => {
