@@ -29,7 +29,7 @@ export class AtomicLedgerUpdateService {
         actions,
       );
 
-      const { newActions, rolledBackActionIds } =
+      const { newActions, rolledBackActionIds, originalActionsMap } =
         this.prepareActionLookups(
           duplicatedPreviousActions,
           previousRollbacks,
@@ -39,7 +39,7 @@ export class AtomicLedgerUpdateService {
       const balanceDelta = this.calculateBalanceDelta(
         newActions,
         rolledBackActionIds,
-        actions,
+        originalActionsMap,
       );
 
       
@@ -126,12 +126,13 @@ export class AtomicLedgerUpdateService {
 
   // Prepare lookup maps and determine which actions are new, rolled back, etc.
   private prepareActionLookups(
-    duplicatedPreviousActions: ActionLedgerEntry[],
-    previousRollbacks: ActionLedgerEntry[],
+    existingActions: ActionLedgerEntry[],
+    rollbacks: ActionLedgerEntry[],
     actions: NewActionLedgerEntry[],
   ): {
     newActions: NewActionLedgerEntry[];
     rolledBackActionIds: Set<string>;
+    originalActionsMap: Map<string, ActionLedgerEntry>;
   } {
     const rollbackActions = actions.filter((a) => a.type === 'rollback');
     const rollbackOriginalIds = rollbackActions
@@ -139,15 +140,15 @@ export class AtomicLedgerUpdateService {
       .filter((id): id is string => id !== null && id !== undefined);
 
     // Build lookup maps
-    const existingActionIds = new Set(duplicatedPreviousActions.map((a) => a.actionId));
+    const existingActionIds = new Set(existingActions.map((a) => a.actionId));
     const rolledBackActionIds = new Set(
-      previousRollbacks
+      rollbacks
         .filter((a) => a.originalActionId)
         .map((a) => a.originalActionId!)
         .filter((id): id is string => id !== null),
     );
     const originalActionsMap = new Map(
-      duplicatedPreviousActions
+      existingActions
         .filter((a) => rollbackOriginalIds.includes(a.actionId))
         .map((a) => [a.actionId, a]),
     );
@@ -173,17 +174,18 @@ export class AtomicLedgerUpdateService {
     return {
       newActions,
       rolledBackActionIds,
+      originalActionsMap,
     };
   }
 
   private calculateBalanceDelta(
     newActions: NewActionLedgerEntry[],
     rolledBackActionIds: Set<string>,
-    actions: NewActionLedgerEntry[],
+    originalActionsMap: Map<string, ActionLedgerEntry>,
   ): number {
     return newActions.reduce((total, action) => {
       if (action.type === 'rollback') {
-        const originalAction = actions.find(a => a.actionId === action.originalActionId);
+        const originalAction = originalActionsMap.get(action.originalActionId!);
 
         if (originalAction) {
           // Original action exists: reverse the balance change
