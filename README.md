@@ -1,133 +1,115 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+Hello dear reviewer! And welcome to this window to my brain, I hope you enjoy it.
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+## Main highlights
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+* **Strong typing**: I've strongly typed Actions and other models. Check the discriminated union type for actions in `src/aggregator/dto/process-request.dto.ts` and the schema types in `src/database/schema.ts`
 
-## Description
+* **Ledger design**: Main design consists of two tables (`balances` and `actions_ledger`) that are atomically updated. More details in the [Ledger Design](#ledger-design) section below
 
-Yeet Casino Bet Processor - A production-grade NestJS application for processing casino bets with HMAC authentication, idempotency, and RTP reporting.
+* **Full CI pipeline**: Complete GitHub Actions pipeline including Docker spin up, integration tests, and performance tests automation. Includes DB seeds to spin up from scratch testing environments.
 
-## 🐳 Docker Setup (Recommended)
+## Assumptions
 
-The easiest way to run the project is using Docker Compose:
+(These are things I'd normally ask or clarify, but here I took assumptions instead to do the work fully asynchronously)
+
+* The doc mentions "There is only a single endpoint". I've interpreted it's meant for the processing actions only, but created separate endpoints for RTP reports (`/aggregator/takehome/rtp` for casino-wide and `/aggregator/takehome/rtp/{user_id}` for per-user)
+
+* On the RTP report, I've assumed "rounds" is defined as "placed bets" actions (i.e., the total count of `bet` type actions)
+
+* On the same RTP report endpoint, if the denominator (total_bet) is 0, we return `null` for RTP
+
+* I've assumed we will not have a huge number of actions sent on a single `/process` endpoint call. I've therefore prioritized readability vs optimizing for large `/process` payloads
+
+* All actions in a /process call are executed at the same time. That means that even if a first "action" in a batch is a bet that would put the user under 0, but there's a win action later **in the same batch call*** that puts them above 0 again, we don't fail and it's a valid use case.
+
+## Frameworks and tech decisions
+
+* **NestJS** as a framework on top of Node.js, as annotations make it easy to set up routes and guards like HMAC
+
+* **Drizzle ORM** because I was recently told it is faster than others like TypeORM and it's what cool people use :P
+
+* **Playwright** for integration tests, which is mostly used for UI testing but I'm comfortable with. In a real production environment, I might use one more focused on API testing
+
+* **K6** for load testing: Lightweight, easy to use, widely supported
+
+* **GitHub Actions** for CI, because it's easy to integrate and see the results by a reviewer
+
+## Ledger Design
+
+The ledger system is built around an **event sourcing pattern** with two core tables that are atomically updated:
+
+### Tables
+
+1. **`actions_ledger`**: An append-only log of all actions (bets, wins, rollbacks)
+   - Each action has a unique `action_id` (enforced by unique constraint) for idempotency
+   - Stores action metadata: `user_id`, `currency`, `amount`, `type`, `game`, `game_id`, `created_at`
+   - Rollback actions reference their original action via `original_action_id`
+
+2. **`balances`**: Denormalized balance cache for fast lookups
+   - Primary key: `user_id`
+   - `balance` field with a database-level check constraint ensuring it's never negative (`balance >= 0`)
+
+### Atomic Updates
+
+All write operations happen within a single database transaction in `AtomicLedgerUpdateService`:
+
+1. **Idempotency check**: Query existing actions by `action_id` to filter out duplicates, and filter those out to avoid re-processing
+2. **Rollback resolution**: 
+   - Find rollbacks that reference new actions (pre-rollbacks becoming active)
+   - Find rollbacks in the current batch that reference previous or current actions
+3. **Balance delta calculation**: 
+   - Process new bet/win actions (subtract bets, add wins)
+   - Apply rollbacks effects
+4. **Atomic commit**: 
+   - Insert new actions into `actions_ledger`
+   - Update/insert balance with row-level lock
+   - All-or-nothing: if balance would go negative, the entire transaction rolls back
+
+### Rollback Handling
+
+The system handles two types of rollbacks:
+
+1. **Regular rollback**: Rollback of an existing action
+   - Reverse the balance change from the original action
+   - Record both the original action and the rollback in the ledger
+
+2. **Pre-rollback**: Rollback received before the original action
+   - Record the rollback immediately (no balance change)
+   - When the original action arrives later, it's detected as pre-rolled-back and has no effect on balance
+   - Still generates a `tx_id` for idempotency purposes
+
+### Balance Integrity
+
+* **Non-negative constraint**: Enforced at both application level (throws `InsufficientFundsException`) and database level (check constraint)
+* **Row-level locking**: Balance row is locked with `.for('update')` to prevent concurrent modifications
+* **Event sourcing**: Balance can be recalculated from `actions_ledger` at any time, making `balances` a performance optimization cache
+
+## Quick Start
+
+### Docker
 
 ```bash
-# Start services (API + Database when added)
+# Start services (API + Database)
 docker compose up -d
-
-# Or use the helper script
-./scripts/docker-start.sh
 
 # View logs
 docker compose logs -f api
 
+# Reset database (truncates tables and reseeds with test data)
+./scripts/reset-test-db.sh
+
 # Stop services
 docker compose down
-
-# Or use the helper script
-./scripts/docker-stop.sh
 ```
 
 The API will be available at `http://localhost:3000`
 
-**Note**: Use `docker compose` (Docker Compose V2) instead of `docker-compose` (V1).
-
-## Local Development Setup
-
-If you prefer to run locally without Docker:
-
-### Prerequisites
-- Node.js 20+ (required for NestJS 11)
-- PostgreSQL 16+ (when database is added)
-
-### Installation
+## Running Tests
 
 ```bash
-# Install dependencies
-npm install
+# Integration tests (Playwright)
+npm run test:integration
+
+# Performance tests (K6)
+LOAD_PROFILE=easy|mid|hard ./scripts/run-k6.sh
 ```
-
-### Running the Application
-
-```bash
-# Development mode (with auto-reload)
-npm run start:dev
-
-# Production mode
-npm run build
-npm run start:prod
-
-# Debug mode
-npm run start:debug
-```
-
-## Run tests
-
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
