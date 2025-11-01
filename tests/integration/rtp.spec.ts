@@ -1,5 +1,6 @@
-import { test, expect } from '@playwright/test';
-import { TEST_CONFIG } from './test-helpers';
+import { test, expect } from './fixtures';
+import { TEST_CONFIG, generateActionId } from './test-helpers';
+import { sum } from './utils/math';
 
 const { BASE_URL } = TEST_CONFIG;
 
@@ -57,40 +58,6 @@ test.describe('RTP Report', () => {
     expect(userIds).toContain('99|ETH|EUR');
   });
 
-  test('Per-user RTP returns single user data', async ({ request }) => {
-    const userId = '8|USDT|USD';
-    const response = await request.get(
-      `${BASE_URL}/aggregator/takehome/rtp/${encodeURIComponent(userId)}?from=2025-01-01T00:00:00Z&to=2025-01-31T23:59:59Z`,
-    );
-
-    expect(response.status()).toBe(200);
-
-    const body = await response.json();
-    expect(body).toHaveProperty('data');
-    expect(Array.isArray(body.data)).toBe(true);
-    expect(body.data).toHaveLength(1);
-
-    // Verify it's the correct user
-    expect(body.data[0].user_id).toBe(userId);
-    expect(body.data[0]).toHaveProperty('currency');
-    expect(body.data[0]).toHaveProperty('rounds');
-    expect(body.data[0]).toHaveProperty('total_bet');
-    expect(body.data[0]).toHaveProperty('total_win');
-    expect(body.data[0]).toHaveProperty('rtp');
-  });
-
-  test('Per-user RTP returns correct user_id in response', async ({ request }) => {
-    const userId = '42|BTC|USD';
-    const response = await request.get(
-      `${BASE_URL}/aggregator/takehome/rtp/${encodeURIComponent(userId)}?from=2025-01-01T00:00:00Z&to=2025-01-31T23:59:59Z`,
-    );
-
-    const body = await response.json();
-    
-    // Verify the returned user_id matches the requested one
-    expect(body.data[0].user_id).toBe(userId);
-  });
-
   test('RTP values are within valid range (0 to 1)', async ({ request }) => {
     const response = await request.get(
       `${BASE_URL}/aggregator/takehome/rtp?from=2025-01-01T00:00:00Z&to=2025-01-31T23:59:59Z`,
@@ -106,20 +73,79 @@ test.describe('RTP Report', () => {
     }
   });
 
-  test('RTP calculation is consistent with total_bet and total_win', async ({ request }) => {
+  test('Per-user RTP with real data - multiple bets and wins', async ({
+    newUserWithBalance,
+    processActions,
+    request,
+  }) => {
+    // Create a user with initial balance (this creates a win action with initialBalance)
+    const initialBalance = 100000;
+    const userId = await newUserWithBalance(initialBalance);
+    const gameId = 'rtp-test-game';
+
+    // Place 30 bets of varying amounts
+    const betAmounts = [100, 200, 150, 300, 250, 175, 125, 225, 275, 325, 
+                        110, 210, 160, 310, 260, 185, 135, 235, 285, 335,
+                        120, 220, 170, 320, 270, 195, 145, 245, 295, 345];
+    
+    for (let i = 0; i < betAmounts.length; i++) {
+      await processActions({
+        user_id: userId,
+        currency: 'USD',
+        game: 'test:rtp',
+        game_id: gameId,
+        actions: [
+          {
+            action: 'bet',
+            action_id: generateActionId(`bet-${i}`),
+            amount: betAmounts[i],
+          },
+        ],
+      });
+    }
+
+    // Place 25 wins of varying amounts
+    const winAmounts = [150, 250, 200, 350, 300, 225, 175, 275, 325, 375,
+                        160, 260, 210, 360, 310, 235, 185, 285, 335, 385,
+                        170, 270, 220, 370, 320];
+    
+    for (let i = 0; i < winAmounts.length; i++) {
+      await processActions({
+        user_id: userId,
+        currency: 'USD',
+        game: 'test:rtp',
+        game_id: gameId,
+        actions: [
+          {
+            action: 'win',
+            action_id: generateActionId(`win-${i}`),
+            amount: winAmounts[i],
+          },
+        ],
+      });
+    }
+
+    const expectedRtp = (sum(winAmounts) + initialBalance) / sum(betAmounts);
+
+    const now = new Date();
+    const fromDate = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+    const toDate = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
     const response = await request.get(
-      `${BASE_URL}/aggregator/takehome/rtp?from=2025-01-01T00:00:00Z&to=2025-01-31T23:59:59Z`,
+      `${BASE_URL}/aggregator/takehome/rtp/${encodeURIComponent(userId)}?from=${fromDate}&to=${toDate}`,
     );
 
-    const body = await response.json();
+    expect(response.status()).toBe(200);
 
-    for (const user of body.data) {
-      if (user.rtp !== null && user.total_bet > 0) {
-        const calculatedRtp = user.total_win / user.total_bet;
-        // Allow reasonable floating point differences (0.1%)
-        expect(Math.abs(user.rtp - calculatedRtp)).toBeLessThan(0.001);
-      }
-    }
+    const body = await response.json();
+    expect(body.data).toHaveLength(1);
+
+    const rtpData = body.data[0];
+    expect(rtpData.user_id).toBe(userId);
+    expect(rtpData.currency).toBe('USD');
+    expect(rtpData.rounds).toBe(betAmounts.length);
+    expect(rtpData.total_bet).toBe(sum(betAmounts));
+    expect(rtpData.total_win).toBe(sum(winAmounts) + initialBalance);
+    expect(Math.abs(rtpData.rtp - expectedRtp)).toBeLessThan(0.00001);
   });
 });
 

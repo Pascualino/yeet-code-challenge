@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, and, between, sql } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DATABASE_CONNECTION } from './database.module';
 import * as schema from './schema';
@@ -105,6 +105,57 @@ export class LedgerService {
         balance: updatedBalance[0],
       };
     });
+  }
+
+  async getUserRtp(
+    userId: string,
+    from: Date,
+    to: Date,
+  ): Promise<{
+    user_id: string;
+    currency: string;
+    rounds: number;
+    total_bet: number;
+    total_win: number;
+    rtp: number | null;
+  }> {
+    const result = await this.db
+      .select({
+        rounds: sql<number>`COUNT(CASE WHEN ${actionsLedger.type} = 'bet' AND ${actionsLedger.amount} IS NOT NULL THEN 1 END)`,
+        total_bet: sql<number>`COALESCE(SUM(CASE WHEN ${actionsLedger.type} = 'bet' THEN ${actionsLedger.amount} ELSE 0 END), 0)`,
+        total_win: sql<number>`COALESCE(SUM(CASE WHEN ${actionsLedger.type} = 'win' THEN ${actionsLedger.amount} ELSE 0 END), 0)`,
+      })
+      .from(actionsLedger)
+      .where(
+        and(
+          eq(actionsLedger.userId, userId),
+          between(actionsLedger.createdAt, from, to),
+        ),
+      )
+      .limit(1);
+
+    const stats = result[0];
+    if (!stats) {
+      return {
+        user_id: userId,
+        currency: 'USD',
+        rounds: 0,
+        total_bet: 0,
+        total_win: 0,
+        rtp: null,
+      };
+    }
+
+    const rtp = stats.total_bet > 0 ? stats.total_win / stats.total_bet : null;
+
+    return {
+      user_id: userId,
+      currency: 'USD',
+      rounds: Number(stats.rounds),
+      total_bet: Number(stats.total_bet),
+      total_win: Number(stats.total_win),
+      rtp,
+    };
   }
 }
 

@@ -99,18 +99,13 @@ export class AggregatorController {
     @Param('user_id') userId: string,
     @Query() query: RtpRequestDto,
   ): Promise<RtpResponseDto> {
-    // Mock response for per-user RTP
+    const from = new Date(query.from);
+    const to = new Date(query.to);
+
+    const rtpData = await this.ledgerService.getUserRtp(userId, from, to);
+
     return {
-      data: [
-        {
-          user_id: userId,
-          currency: 'USD',
-          rounds: 123456,
-          total_bet: 123456789,
-          total_win: 117283950,
-          rtp: 0.9498,
-        },
-      ],
+      data: [rtpData],
     };
   }
 }
