@@ -23,25 +23,31 @@ export class AtomicLedgerUpdateService {
     userId: string,
     actions: NewActionLedgerEntry[],
   ): Promise<{ actions: ActionLedgerEntry[]; balance: Balance }> {
+    /**
+     * Here's how this works:
+     * 1. We apply idempotency to filter out the actions that have already been processed
+     * 2. We calculate which rollback actions are applicable, which can be:
+     * 2.1. Previous rollback actions that are now "activating" because the action they refer to is processed now
+     * 2.2. Current rollback actions for past actions
+     * 3. We calculate the balance delta based on every win and bet action processed now, plus any rollback (processed or "activated" now)
+     * 4. We update the balance and ledger tables and return the result
+     */
     return await this.db.transaction(async (tx) => {
-      const { duplicatedPreviousActions, previousRollbacks } = await this.queryPreviousRelevantActions(
+      const { duplicatedPreviousActions, newActions } = await this.queryIdempotentActions(
         tx,
         actions,
       );
-
-      const { newActions, rolledBackActionIds, originalActionsMap } =
-        this.prepareActionLookups(
-          duplicatedPreviousActions,
-          previousRollbacks,
-          actions,
-        );
+      
+      const { applicableRollbackActions, rolledBackedActions } = await this.calculateApplyingRollbackActions(
+        tx,
+        newActions,
+      );
 
       const balanceDelta = this.calculateBalanceDelta(
         newActions,
-        rolledBackActionIds,
-        originalActionsMap,
+        applicableRollbackActions,
+        rolledBackedActions,
       );
-
       
       const insertedActionsRecords = newActions.length > 0 ? await tx.insert(actionsLedger).values(newActions).returning() : [];
       const updatedBalanceRecord = await this.updateUserBalanceTransaction(
@@ -69,150 +75,76 @@ export class AtomicLedgerUpdateService {
     });
   }
 
-  // Query all relevant previous actions from database:
-  // 1. Actions with same actionIds as new ones (for idempotency)
-  // 2. Bet/win actions with actionId matching rollback originalActionIds (for rollback reversal)
-  // 3. Rollbacks with originalActionId matching new bet/win actionIds (for pre-rollback detection)
-  private async queryPreviousRelevantActions(
+  private async queryIdempotentActions(
     tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
     actions: NewActionLedgerEntry[],
   ): Promise<{
     duplicatedPreviousActions: ActionLedgerEntry[];
-    previousRollbacks: ActionLedgerEntry[];
+    newActions: NewActionLedgerEntry[];
   }> {
-    const actionIds = actions.map((a) => a.actionId);
-    const newBetWinActions = actions.filter(
-      (a) => a.type === 'bet' || a.type === 'win',
-    );
-    const newBetWinActionIds = newBetWinActions.map((a) => a.actionId);
-    const rollbackActions = actions.filter((a) => a.type === 'rollback');
-    const rollbackOriginalIds = rollbackActions
-      .map((a) => a.originalActionId)
-      .filter((id): id is string => id !== null && id !== undefined);
-
-    // Query duplicated actions (for idempotency) and original actions for rollback reversal
-    const relevantIds = [
-      ...actionIds,
-      ...rollbackOriginalIds,
-    ];
-    
-    const duplicatedPreviousActions =
-      relevantIds.length > 0
-        ? await tx
+    const duplicatedPreviousActions = await tx
             .select()
             .from(actionsLedger)
-            .where(inArray(actionsLedger.actionId, relevantIds))
-        : [];
-
-    // Query rollbacks that reference new bet/win actions (for pre-rollback detection)
-    const previousRollbacks =
-      newBetWinActionIds.length > 0
-        ? await tx
-            .select()
-            .from(actionsLedger)
-            .where(
-              and(
-                eq(actionsLedger.type, 'rollback'),
-                inArray(actionsLedger.originalActionId, newBetWinActionIds),
-              ),
-            )
-        : [];
+            .where(inArray(actionsLedger.actionId, actions.map((a) => a.actionId)));
 
     return {
       duplicatedPreviousActions,
-      previousRollbacks,
+      newActions: actions.filter(
+        (a) => !duplicatedPreviousActions.some((b) => b.actionId === a.actionId),
+      ),
     };
   }
 
-  // Prepare lookup maps and determine which actions are new, rolled back, etc.
-  private prepareActionLookups(
-    existingActions: ActionLedgerEntry[],
-    rollbacks: ActionLedgerEntry[],
-    actions: NewActionLedgerEntry[],
-  ): {
-    newActions: NewActionLedgerEntry[];
-    rolledBackActionIds: Set<string>;
-    originalActionsMap: Map<string, ActionLedgerEntry>;
-  } {
-    const rollbackActions = actions.filter((a) => a.type === 'rollback');
-    const rollbackOriginalIds = rollbackActions
-      .map((a) => a.originalActionId)
-      .filter((id): id is string => id !== null && id !== undefined);
-
-    // Build lookup maps
-    const existingActionIds = new Set(existingActions.map((a) => a.actionId));
-    const rolledBackActionIds = new Set(
-      rollbacks
-        .filter((a) => a.originalActionId)
-        .map((a) => a.originalActionId!)
-        .filter((id): id is string => id !== null),
-    );
-    const originalActionsMap = new Map(
-      existingActions
-        .filter((a) => rollbackOriginalIds.includes(a.actionId))
-        .map((a) => [a.actionId, a]),
-    );
-
-    // Check for in-batch pre-rollbacks (rollback and original in same request)
-    for (const rollbackAction of rollbackActions) {
-      if (rollbackAction.originalActionId) {
-        const originalInBatch = actions.find(
-          (a) => a.actionId === rollbackAction.originalActionId,
-        );
-        if (originalInBatch && (originalInBatch.type === 'bet' || originalInBatch.type === 'win')) {
-          rolledBackActionIds.add(originalInBatch.actionId);
-          originalActionsMap.set(originalInBatch.actionId, originalInBatch as ActionLedgerEntry);
-        }
-      }
-    }
-
-    // Separate new actions from existing ones (for idempotency)
-    const newActions = actions.filter(
-      (a) => !existingActionIds.has(a.actionId),
-    );
+  private async calculateApplyingRollbackActions(
+    tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
+    newActions: NewActionLedgerEntry[],
+  ): Promise<{ applicableRollbackActions: Array<ActionLedgerEntry | NewActionLedgerEntry>; rolledBackedActions: Array<ActionLedgerEntry | NewActionLedgerEntry> }> {
+    // Previous rollback actions are "activated" when the action they refer to is processed
+    // And they basically cancel each other. I think the code is cleaner and easier thinking 
+    // about it that way.
+    const previousRollbacksActions = await tx
+            .select()
+            .from(actionsLedger)
+            .where(inArray(actionsLedger.originalActionId, newActions.map((a) => a.actionId)));
     
+    const currentRollbacksActions = newActions.filter((a) => a.type === 'rollback');
+    const previousActionsGettingRolledBack = await tx
+            .select()
+            .from(actionsLedger)
+            .where(inArray(actionsLedger.actionId, currentRollbacksActions.map((a) => a.originalActionId!)));
+
+    const applicableRollbackActions = [...previousRollbacksActions, ...currentRollbacksActions];
+    const rolledBackedActions = [...previousActionsGettingRolledBack, ...newActions.filter((a) => applicableRollbackActions.some((b) => b.originalActionId === a.actionId))];
+
     return {
-      newActions,
-      rolledBackActionIds,
-      originalActionsMap,
+      applicableRollbackActions,
+      rolledBackedActions,
     };
   }
+
 
   private calculateBalanceDelta(
     newActions: NewActionLedgerEntry[],
-    rolledBackActionIds: Set<string>,
-    originalActionsMap: Map<string, ActionLedgerEntry>,
+    applicableRollbackActions: Array<ActionLedgerEntry | NewActionLedgerEntry>,
+    rolledBackedActions: Array<ActionLedgerEntry | NewActionLedgerEntry>,
   ): number {
-    return newActions.reduce((total, action) => {
+    let balanceDelta = 0;
+    for (const action of applicableRollbackActions) {
       if (action.type === 'rollback') {
-        const originalAction = originalActionsMap.get(action.originalActionId!);
-
+        const originalAction = rolledBackedActions.find((a) => a.actionId === action.originalActionId);
         if (originalAction) {
-          // Original action exists: reverse the balance change
-          if (originalAction.type === 'bet') {
-            return total + originalAction.amount!;
-          } else if (originalAction.type === 'win') {
-            return total - originalAction.amount!;
-          }
+          balanceDelta = originalAction.type === 'bet' ? balanceDelta + originalAction.amount! : balanceDelta - originalAction.amount!;
         }
-        // Original action doesn't exist yet (pre-rollback): no balance change
-        // This means the rollback is waiting for the original action to arrive
-        return total;
-      } else if (action.type === 'bet') {
-        // Check if this bet is already rolled back (pre-rollback scenario)
-        if (rolledBackActionIds.has(action.actionId)) {
-          return total;
-        }
-        return total - action.amount!;
-      } else if (action.type === 'win') {
-        // Check if this win is already rolled back (pre-rollback scenario)
-        if (rolledBackActionIds.has(action.actionId)) {
-          return total;
-        }
-        return total + action.amount!;
       }
-      return total;
-    }, 0);
+    }
+    for (const action of newActions) {
+      if (action.type === 'bet') {
+        balanceDelta -= action.amount!;
+      } else if (action.type === 'win') {
+        balanceDelta += action.amount!;
+      }
+    }
+    return balanceDelta;
   }
 
   private async updateUserBalanceTransaction(

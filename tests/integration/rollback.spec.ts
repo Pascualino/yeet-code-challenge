@@ -30,7 +30,7 @@ test.describe('Rollback Operations', () => {
     
     expect(betResult.transactions).toHaveLength(1);
     expect(betResult.transactions[0].action_id).toBe(betActionId);
-    const balanceAfterBet = betResult.balance;
+    expect(betResult.balance).toBe(10000 - 100);
 
     // Step 2: Rollback the bet
     const rollbackActionId = generateActionId('rollback');
@@ -55,7 +55,7 @@ test.describe('Rollback Operations', () => {
     expect(rollbackResult.transactions[0].tx_id).toBeTruthy();
     
     // Balance should be restored (increased by 100)
-    expect(rollbackResult.balance).toBe(balanceAfterBet + 100);
+    expect(rollbackResult.balance).toBe(10000 - 100 + 100);
   });
 
   test('Scenario I: Pre-Rollback (Rollback Before Original)', async ({
@@ -82,9 +82,9 @@ test.describe('Rollback Operations', () => {
       ],
     });
     
-    const balanceAfterPreRollback = rollbackResult.balance;
     expect(rollbackResult.transactions).toHaveLength(1);
     expect(rollbackResult.transactions[0].action_id).toBe(rollbackActionId);
+    expect(rollbackResult.balance).toBe(10000);
 
     // Step 2: Send the original bet (which was pre-rolled-back)
     const betResult = await processActions({
@@ -108,7 +108,7 @@ test.describe('Rollback Operations', () => {
     expect(betResult.transactions[0].tx_id).toBeTruthy();
     
     // Balance should remain unchanged (pre-rolled-back)
-    expect(betResult.balance).toBe(balanceAfterPreRollback);
+    expect(betResult.balance).toBe(10000);
   });
 
   test('Scenario J: Multiple Pre-Rollbacks', async ({ newUserWithBalance, processActions }) => {
@@ -170,6 +170,84 @@ test.describe('Rollback Operations', () => {
     
     // Balance should remain unchanged (both were pre-rolled-back)
     expect(actionsResult.balance).toBe(balanceAfterRollbacks);
+  });
+
+  test('In-batch rollback: Action then Rollback in same request', async ({
+    newUserWithBalance,
+    processActions,
+  }) => {
+    const userId = await newUserWithBalance(10000);
+    
+    const betActionId = generateActionId('bet');
+    const rollbackActionId = generateActionId('rollback');
+    
+    // Send bet and rollback in the same request (bet comes first)
+    const result = await processActions({
+      user_id: userId,
+      currency: 'USD',
+      game: 'acceptance:test',
+      game_id: 'in-batch-rollback-1',
+      finished: true,
+      actions: [
+        {
+          action: 'bet',
+          action_id: betActionId,
+          amount: 100,
+        },
+        {
+          action: 'rollback',
+          action_id: rollbackActionId,
+          original_action_id: betActionId,
+        },
+      ],
+    });
+    
+    // Both actions should create transactions
+    expect(result.transactions).toHaveLength(2);
+    expect(result.transactions[0].action_id).toBe(betActionId);
+    expect(result.transactions[1].action_id).toBe(rollbackActionId);
+    
+    // Balance should be unchanged (bet then immediately rolled back)
+    expect(result.balance).toBe(10000);
+  });
+
+  test('In-batch pre-rollback: Rollback then Action in same request', async ({
+    newUserWithBalance,
+    processActions,
+  }) => {
+    const userId = await newUserWithBalance(10000);
+    
+    const rollbackActionId = generateActionId('rollback');
+    const betActionId = generateActionId('bet');
+    
+    // Send rollback and bet in the same request (rollback comes first)
+    const result = await processActions({
+      user_id: userId,
+      currency: 'USD',
+      game: 'acceptance:test',
+      game_id: 'in-batch-rollback-2',
+      finished: true,
+      actions: [
+        {
+          action: 'rollback',
+          action_id: rollbackActionId,
+          original_action_id: betActionId,
+        },
+        {
+          action: 'bet',
+          action_id: betActionId,
+          amount: 100,
+        },
+      ],
+    });
+    
+    // Both actions should create transactions
+    expect(result.transactions).toHaveLength(2);
+    expect(result.transactions[0].action_id).toBe(rollbackActionId);
+    expect(result.transactions[1].action_id).toBe(betActionId);
+    
+    // Balance should be unchanged (bet was pre-rolled-back)
+    expect(result.balance).toBe(10000);
   });
 });
 
