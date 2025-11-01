@@ -116,10 +116,7 @@ test.describe('RTP Report', () => {
 
     expect(response.status()).toBe(200);
 
-    const body = await response.json();
-    expect(body.data).toHaveLength(1);
-
-    const rtpData = body.data[0];
+    const rtpData = await response.json();
     expect(rtpData.user_id).toBe(userId);
     expect(rtpData.currency).toBe('USD');
     expect(rtpData.rounds).toBe(stats.rounds);

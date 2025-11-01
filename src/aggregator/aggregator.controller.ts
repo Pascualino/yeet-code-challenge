@@ -14,7 +14,7 @@ import { LedgerService } from '../database/ledger.service';
 import type { ProcessRequestDto } from './dto/process-request.dto';
 import type { ProcessResponseDto } from './dto/process-response.dto';
 import type { RtpRequestDto } from './dto/rtp-request.dto';
-import type { RtpResponseDto } from './dto/rtp-response.dto';
+import type { RtpResponseDto, UserRtpDto } from './dto/rtp-response.dto';
 
 @Controller('aggregator/takehome')
 export class AggregatorController {
@@ -77,15 +77,11 @@ export class AggregatorController {
   async getUserRtpReport(
     @Param('user_id') userId: string,
     @Query() query: RtpRequestDto,
-  ): Promise<RtpResponseDto> {
+  ): Promise<UserRtpDto> {
     const from = new Date(query.from);
     const to = new Date(query.to);
 
-    const rtpData = await this.ledgerService.getUserRtp(userId, from, to);
-
-    return {
-      data: [rtpData],
-    };
+    return await this.ledgerService.getUserRtp(userId, from, to);
   }
 }
 
