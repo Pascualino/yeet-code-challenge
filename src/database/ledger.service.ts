@@ -157,5 +157,46 @@ export class LedgerService {
       rtp,
     };
   }
+
+  async getCasinoWideRtp(
+    from: Date,
+    to: Date,
+  ): Promise<
+    Array<{
+      user_id: string;
+      currency: string;
+      rounds: number;
+      total_bet: number;
+      total_win: number;
+      rtp: number | null;
+    }>
+  > {
+      const results = await this.db
+        .select({
+          user_id: actionsLedger.userId,
+          currency: actionsLedger.currency,
+          rounds: sql<number>`CAST(COUNT(CASE WHEN ${actionsLedger.type} = 'bet' AND ${actionsLedger.amount} IS NOT NULL THEN 1 END) AS INTEGER)`,
+          total_bet: sql<string>`COALESCE(SUM(CASE WHEN ${actionsLedger.type} = 'bet' THEN ${actionsLedger.amount} ELSE 0 END), 0)::text`,
+          total_win: sql<string>`COALESCE(SUM(CASE WHEN ${actionsLedger.type} = 'win' THEN ${actionsLedger.amount} ELSE 0 END), 0)::text`,
+        })
+        .from(actionsLedger)
+        .where(between(actionsLedger.createdAt, from, to))
+        .groupBy(actionsLedger.userId, actionsLedger.currency);
+
+    return results.map((row) => {
+      const totalBet = Number(row.total_bet);
+      const totalWin = Number(row.total_win);
+      const rtp = totalBet > 0 ? totalWin / totalBet : null;
+
+      return {
+        user_id: row.user_id,
+        currency: row.currency,
+        rounds: row.rounds,
+        total_bet: totalBet,
+        total_win: totalWin,
+        rtp,
+      };
+    });
+  }
 }
 
