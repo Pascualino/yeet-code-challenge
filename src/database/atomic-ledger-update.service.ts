@@ -29,64 +29,16 @@ export class AtomicLedgerUpdateService {
         .from(balances)
         .where(eq(balances.userId, userId))
         .for('update');
+      
+      const { existingActionIds, rolledBackActionIds, originalActionsMap, existingActionsMap } =
+        await this.gatherPreviousRelevantTransactions(
+          tx,
+          actions,
+        );
 
-      const actionIds = actions.map((a) => a.actionId);
-      
-      const newBetWinActions = actions.filter(
-        (a) => a.type === 'bet' || a.type === 'win',
-      );
-      const newRollbackActions = actions.filter((a) => a.type === 'rollback');
-      
-      const newBetWinActionIds = newBetWinActions.map((a) => a.actionId);
-      const rollbackOriginalIds = newRollbackActions
-        .map((a) => a.originalActionId)
-        .filter((id): id is string => id !== null && id !== undefined);
-      
-      // Get all relevant previous actions:
-      // 1. Actions with same actionIds as new ones (for idempotency)
-      // 2. Rollbacks with originalActionId matching new bet/win actionIds (for pre-rollback detection)
-      // 3. Bet/win actions with actionId matching rollback originalActionIds (for rollback reversal)
-      const relevantIds = [
-        ...actionIds, // For idempotency check
-        ...rollbackOriginalIds, // For finding original actions to reverse
-      ];
-      
-      const relevantPreviousActions =
-        relevantIds.length > 0
-          ? await tx
-              .select()
-              .from(actionsLedger)
-              .where(
-                or(
-                  inArray(actionsLedger.actionId, relevantIds),
-                  and(
-                    eq(actionsLedger.type, 'rollback'),
-                    inArray(actionsLedger.originalActionId, newBetWinActionIds),
-                  ),
-                ),
-              )
-          : [];
-
-      // Build lookup maps
-      const existingActionIds = new Set(
-        relevantPreviousActions
-          .filter((a) => actionIds.includes(a.actionId))
-          .map((a) => a.actionId),
-      );
-      const rolledBackActionIds = new Set(
-        relevantPreviousActions
-          .filter((a) => a.type === 'rollback' && a.originalActionId)
-          .map((a) => a.originalActionId)
-          .filter((id): id is string => id !== null),
-      );
-      const originalActionsMap = new Map(
-        relevantPreviousActions
-          .filter((a) => rollbackOriginalIds.includes(a.actionId))
-          .map((a) => [a.actionId, a]),
-      );
-
+      const rollbackActions = actions.filter((a) => a.type === 'rollback');
       // Check for in-batch pre-rollbacks (rollback and original in same request)
-      for (const rollbackAction of newRollbackActions) {
+      for (const rollbackAction of rollbackActions) {
         if (rollbackAction.originalActionId) {
           const originalInBatch = actions.find(
             (a) => a.actionId === rollbackAction.originalActionId,
@@ -121,9 +73,7 @@ export class AtomicLedgerUpdateService {
       );
 
       const allActions = actions.map((requestedAction) => {
-        const existing = relevantPreviousActions.find(
-          (e) => e.actionId === requestedAction.actionId,
-        );
+        const existing = existingActionsMap.get(requestedAction.actionId);
         if (existing) {
           return existing;
         }
@@ -137,6 +87,77 @@ export class AtomicLedgerUpdateService {
         balance: updatedBalance[0],
       };
     });
+  }
+
+  // Get all relevant previous actions in a single tx:
+  // 1. Actions with same actionIds as new ones (for idempotency)
+  // 2. Rollbacks with originalActionId matching new bet/win actionIds (for pre-rollback detection)
+  // 3. Bet/win actions with actionId matching rollback originalActionIds (for rollback reversal)
+  private async gatherPreviousRelevantTransactions(
+    tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
+    actions: NewActionLedgerEntry[],
+  ): Promise<{
+    existingActionIds: Set<string>;
+    rolledBackActionIds: Set<string>;
+    originalActionsMap: Map<string, ActionLedgerEntry>;
+    existingActionsMap: Map<string, ActionLedgerEntry>;
+  }> {
+    const actionIds = actions.map((a) => a.actionId);
+    const newBetWinActions = actions.filter(
+      (a) => a.type === 'bet' || a.type === 'win',
+    );
+    const newBetWinActionIds = newBetWinActions.map((a) => a.actionId);
+    const rollbackActions = actions.filter((a) => a.type === 'rollback');
+    const rollbackOriginalIds = rollbackActions
+      .map((a) => a.originalActionId)
+      .filter((id): id is string => id !== null && id !== undefined);
+
+
+    const relevantIds = [
+      ...actionIds,
+      ...rollbackOriginalIds,
+    ];
+    
+    const relevantPreviousActions =
+      relevantIds.length > 0
+        ? await tx
+            .select()
+            .from(actionsLedger)
+            .where(
+              or(
+                inArray(actionsLedger.actionId, relevantIds),
+                and(
+                  eq(actionsLedger.type, 'rollback'),
+                  inArray(actionsLedger.originalActionId, newBetWinActionIds),
+                ),
+              ),
+            )
+        : [];
+
+    // Build lookup maps
+    const existingActionsMap = new Map(
+      relevantPreviousActions
+        .filter((a) => actionIds.includes(a.actionId))
+        .map((a) => [a.actionId, a]),
+    );
+    const existingActionIds = new Set(existingActionsMap.keys());
+    const rolledBackActionIds = new Set(
+      relevantPreviousActions
+        .filter((a) => a.type === 'rollback')
+        .map((a) => a.originalActionId!)
+    );
+    const originalActionsMap = new Map(
+      relevantPreviousActions
+        .filter((a) => rollbackOriginalIds.includes(a.actionId))
+        .map((a) => [a.actionId, a]),
+    );
+
+    return {
+      existingActionIds,
+      rolledBackActionIds,
+      originalActionsMap,
+      existingActionsMap,
+    };
   }
 
   private calculateBalanceDelta(
