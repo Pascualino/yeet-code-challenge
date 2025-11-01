@@ -103,57 +103,22 @@ export class AtomicLedgerUpdateService {
         (a) => !existingActionIds.has(a.actionId),
       );
 
-      // Calculate balance delta for new actions
-      const newActionsDelta = newActions.reduce((total, action) => {
-        if (action.type === 'rollback') {
-          const originalAction = originalActionsMap.get(action.originalActionId!);
-
-          if (originalAction) {
-            // Original action exists: reverse the balance change
-            if (originalAction.type === 'bet') {
-              return total + originalAction.amount!;
-            } else if (originalAction.type === 'win') {
-              return total - originalAction.amount!;
-            }
-          }
-          // Original action doesn't exist yet (pre-rollback): no balance change
-          // This means the rollback is waiting for the original action to arrive
-          return total;
-        } else if (action.type === 'bet') {
-          // Check if this bet is already rolled back (pre-rollback scenario)
-          if (rolledBackActionIds.has(action.actionId)) {
-            return total;
-          }
-          return total - action.amount!;
-        } else if (action.type === 'win') {
-          // Check if this win is already rolled back (pre-rollback scenario)
-          if (rolledBackActionIds.has(action.actionId)) {
-            return total;
-          }
-          return total + action.amount!;
-        }
-        return total;
-      }, 0);
-
       const currentBalance = currentBalanceResult[0]?.balance ?? 0;
-      const newBalance = currentBalance + newActionsDelta;
 
-      if (newBalance < 0) {
-        throw new InsufficientFundsException();
-      }
+      const balanceDelta = this.calculateBalanceDelta(
+        newActions,
+        rolledBackActionIds,
+        originalActionsMap,
+      );
 
       const insertedActions = newActions.length > 0 ? await tx.insert(actionsLedger).values(newActions).returning() : [];
 
-      const updatedBalance = currentBalanceResult[0]
-      ? await tx
-          .update(balances)
-          .set({ balance: newBalance })
-          .where(eq(balances.userId, userId))
-          .returning()
-      : await tx
-          .insert(balances)
-          .values({ userId, balance: newBalance })
-          .returning();
+      const updatedBalance = await this.updateUserBalanceTransaction(
+        tx,
+        userId,
+        currentBalanceResult[0],
+        currentBalance + balanceDelta,
+      );
 
       const allActions = actions.map((requestedAction) => {
         const existing = relevantPreviousActions.find(
@@ -172,6 +137,67 @@ export class AtomicLedgerUpdateService {
         balance: updatedBalance[0],
       };
     });
+  }
+
+  private calculateBalanceDelta(
+    newActions: NewActionLedgerEntry[],
+    rolledBackActionIds: Set<string>,
+    originalActionsMap: Map<string, ActionLedgerEntry>,
+  ): number {
+    return newActions.reduce((total, action) => {
+      if (action.type === 'rollback') {
+        const originalAction = originalActionsMap.get(action.originalActionId!);
+
+        if (originalAction) {
+          // Original action exists: reverse the balance change
+          if (originalAction.type === 'bet') {
+            return total + originalAction.amount!;
+          } else if (originalAction.type === 'win') {
+            return total - originalAction.amount!;
+          }
+        }
+        // Original action doesn't exist yet (pre-rollback): no balance change
+        // This means the rollback is waiting for the original action to arrive
+        return total;
+      } else if (action.type === 'bet') {
+        // Check if this bet is already rolled back (pre-rollback scenario)
+        if (rolledBackActionIds.has(action.actionId)) {
+          return total;
+        }
+        return total - action.amount!;
+      } else if (action.type === 'win') {
+        // Check if this win is already rolled back (pre-rollback scenario)
+        if (rolledBackActionIds.has(action.actionId)) {
+          return total;
+        }
+        return total + action.amount!;
+      }
+      return total;
+    }, 0);
+  }
+
+  private async updateUserBalanceTransaction(
+    tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
+    userId: string,
+    currentBalanceRecord: Balance | undefined,
+    newBalance: number,
+  ): Promise<Balance[]> {
+    if (newBalance < 0) {
+      throw new InsufficientFundsException();
+    }
+
+    if (currentBalanceRecord) {
+      return await tx
+        .update(balances)
+        .set({ balance: newBalance })
+        .where(eq(balances.userId, userId))
+        .returning();
+    } else {
+      return await tx
+        .insert(balances)
+        .values({ userId, balance: newBalance })
+        .returning();
+    }
   }
 }
 
