@@ -1,7 +1,6 @@
 import http from 'k6/http';
 import { BASE_URL, ENDPOINT, createHeaders, randomActionId, randomUserId } from './utils.js';
 
-// Configuration: number of virtual users and ramp-up
 export const options = {
   stages: [
     { duration: '2m', target: 1000 },
@@ -22,43 +21,73 @@ export function setup() {
 export default function () {
   const userId = randomUserId();
   const numGames = 900 + Math.floor(Math.random() * 101); // 900-1000 games
-  const initialBalance = 1000; // $1000 starting balance
-  const betAmount = 10;
+  const initialBalance = 1000 + Math.floor(Math.random() * 10000); // $1000-11000 starting balance
+  const betAmount = 10 + Math.floor(Math.random() * 90); // 10-100
   const gameName = `flipping-coin-game`;
   
-  // Step 1: Give user initial balance with a win (excluded from RTP via special game_id)
-  const setupBody = JSON.stringify({
+  // Step 1: Setup initial balance
+  setupInitialBalance(userId, initialBalance);
+
+  // Step 2: Generate all playing actions
+  const allActions = generatePlayingActions(numGames, betAmount, initialBalance);
+
+  // Step 3: Send all actions in a single batch request
+  callProcessEndpoint(userId, 'USD', gameName, undefined, allActions, true);
+}
+
+// Helper: Call the /process endpoint
+function callProcessEndpoint(userId, currency, game, gameId, actions, finished = false) {
+  const body = JSON.stringify({
     user_id: userId,
-    currency: 'USD',
-    game: 'gen:setup',
-    game_id: 'initial-balance', // Special game_id to exclude from RTP calculations
-    actions: [
+    currency: currency,
+    game: game,
+    game_id: gameId,
+    finished: finished,
+    actions: actions,
+  });
+
+  const response = http.post(
+    `${BASE_URL}${ENDPOINT}`,
+    body,
+    { headers: createHeaders(body) }
+  );
+
+  if (response.status !== 200) {
+    throw new Error(`Process endpoint failed for ${userId}: ${response.status} - ${response.body.substring(0, 200)}`);
+  }
+
+  return response;
+}
+
+// Helper: Calculate and send initial balance for a user
+function setupInitialBalance(userId, initialBalance) {
+  callProcessEndpoint(
+    userId,
+    'USD',
+    'gen:setup',
+    'initial-balance', // Special game_id to exclude from RTP calculations
+    [
       {
         action: 'win',
         action_id: randomActionId(),
         amount: initialBalance,
       },
-    ],
-  });
-
-  const setupResponse = http.post(
-    `${BASE_URL}${ENDPOINT}`,
-    setupBody,
-    { headers: createHeaders(setupBody) }
+    ]
   );
+}
 
-  if (setupResponse.status !== 200) {
-    throw new Error(`Setup failed for ${userId}: ${setupResponse.status}`);
-  }
-
-  // Step 2: Generate all game actions (bets + wins) for batch processing
+// Helper: Generate all playing actions for a user
+function generatePlayingActions(numGames, betAmount, initialBalance) {
   const allActions = [];
   let totalBalance = initialBalance;
+  
   for (let gameNum = 0; gameNum < numGames; gameNum++) {
-    if(betAmount > totalBalance) {
+    if (betAmount > totalBalance) {
       break;
     }
+    
     totalBalance -= betAmount;
+    
     // Always place a bet
     allActions.push({
       action: 'bet',
@@ -80,24 +109,7 @@ export default function () {
     }
   }
 
-  // Step 3: Send all actions in a single batch request
-  const batchBody = JSON.stringify({
-    user_id: userId,
-    currency: 'USD',
-    game: gameName,
-    finished: true,
-    actions: allActions,
-  });
-
-  const batchResponse = http.post(
-    `${BASE_URL}${ENDPOINT}`,
-    batchBody,
-    { headers: createHeaders(batchBody) }
-  );
-
-  if (batchResponse.status !== 200) {
-    throw new Error(`Batch game processing failed for ${userId}: ${batchResponse.status} - ${batchResponse.body.substring(0, 200)}`);
-  }
+  return allActions;
 }
 
 // Teardown: Query RTP endpoint to show results
