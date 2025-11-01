@@ -1,10 +1,11 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
-import { Rate } from 'k6/metrics';
+import { Rate, Trend } from 'k6/metrics';
 import { BASE_URL, ENDPOINT, createHeaders, randomUserId, randomActionId } from './utils.js';
 
 // Custom metrics
 const errorRate = new Rate('errors');
+const errorStatusTrend = new Trend('error_status');
 
 // Test configuration
 export const options = {
@@ -18,6 +19,9 @@ export const options = {
     http_req_duration: ['p(95)<100', 'p(99)<200'],
     http_req_failed: ['rate<0.005'],
     errors: ['rate<0.005'],
+    'http_req_failed{status:500}': ['rate<0.01'],  // Track 500 errors separately
+    'http_req_failed{status:503}': ['rate<0.01'],  // Track 503 errors separately
+    'http_req_failed{status:429}': ['rate<0.01'],  // Track rate limit errors
   },
 };
 
@@ -51,6 +55,10 @@ export default function () {
 
   if (!balanceCheck) {
     errorRate.add(1);
+    errorStatusTrend.add(balanceResponse.status);
+    if (balanceResponse.status !== 200) {
+      console.error(`Balance lookup failed: ${balanceResponse.status} - ${balanceResponse.body.substring(0, 200)}`);
+    }
   }
 
   sleep(0.1);
@@ -76,9 +84,15 @@ export default function () {
     { headers: createHeaders(setupWinBody) }
   );
 
-  check(setupResponse, {
+  const setupCheck = check(setupResponse, {
     'setup win status is 200': (r) => r.status === 200,
   });
+
+  if (!setupCheck && setupResponse.status !== 200) {
+    errorRate.add(1);
+    errorStatusTrend.add(setupResponse.status);
+    console.error(`Setup win failed: ${setupResponse.status} - ${setupResponse.body.substring(0, 200)}`);
+  }
 
   sleep(0.1);
 
@@ -125,6 +139,10 @@ export default function () {
 
   if (!betCheck) {
     errorRate.add(1);
+    errorStatusTrend.add(betResponse.status);
+    if (betResponse.status !== 200) {
+      console.error(`Bet request failed: ${betResponse.status} - ${betResponse.body.substring(0, 200)}`);
+    }
   }
 
   sleep(0.1);
@@ -169,6 +187,10 @@ export default function () {
 
   if (!betWinCheck) {
     errorRate.add(1);
+    errorStatusTrend.add(betWinResponse.status);
+    if (betWinResponse.status !== 200) {
+      console.error(`Bet+Win request failed: ${betWinResponse.status} - ${betWinResponse.body.substring(0, 200)}`);
+    }
   }
 
   sleep(0.5);
