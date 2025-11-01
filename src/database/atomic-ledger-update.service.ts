@@ -56,22 +56,12 @@ export class AtomicLedgerUpdateService {
         balanceDelta,
       );
       
-      const allActions = actions.map((requestedAction) => {
-        const existing = duplicatedPreviousActions.find(
-          (a) => a.actionId === requestedAction.actionId,
-        );
-        if (existing) {
-          return existing;
-        }
-        return insertedActionsRecords.find(
-          (i) => i.actionId === requestedAction.actionId,
-        )!;
-      });
-
-      return {
-        actions: allActions,
-        balance: updatedBalanceRecord[0],
-      };
+      return this.buildResponse(
+        actions,
+        duplicatedPreviousActions,
+        insertedActionsRecords,
+        updatedBalanceRecord,
+      );
     });
   }
 
@@ -145,6 +135,30 @@ export class AtomicLedgerUpdateService {
       }
     }
     return balanceDelta;
+  }
+
+  private buildResponse(
+    requestedActions: NewActionLedgerEntry[],
+    duplicatedPreviousActions: ActionLedgerEntry[],
+    insertedActionsRecords: ActionLedgerEntry[],
+    updatedBalanceRecord: Balance[],
+  ): { actions: ActionLedgerEntry[]; balance: Balance } {
+    const allActions = requestedActions.map((requestedAction) => {
+      const existing = duplicatedPreviousActions.find(
+        (a) => a.actionId === requestedAction.actionId,
+      );
+      if (existing) {
+        return existing;
+      }
+      return insertedActionsRecords.find(
+        (i) => i.actionId === requestedAction.actionId,
+      )!;
+    });
+
+    return {
+      actions: allActions,
+      balance: updatedBalanceRecord[0],
+    };
   }
 
   private async updateUserBalanceTransaction(
