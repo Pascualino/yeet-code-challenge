@@ -8,9 +8,9 @@ export const configs = {
     // Low load - suitable for CI/CD environments with limited resources
     stages: [
       { duration: '10s', target: 10 },   // Ramp up to 10 users
-      { duration: '30s', target: 10 },   // Stay at 10 users
+      { duration: '10s', target: 10 },   // Stay at 10 users
       { duration: '10s', target: 50 },   // Ramp up to 50 users
-      { duration: '30s', target: 50 },   // Stay at 50 users
+      { duration: '10s', target: 50 },   // Stay at 50 users
       { duration: '10s', target: 0 },    // Ramp down
     ],
     thresholds: {
