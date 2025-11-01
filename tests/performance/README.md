@@ -25,8 +25,14 @@ npm run test:performance
 # Or run directly with k6
 k6 run --env BASE_URL=http://localhost:3000 --env HMAC_SECRET=test tests/performance/process-endpoint.js
 
-# With custom parameters
-k6 run --env BASE_URL=http://localhost:3000 --env HMAC_SECRET=test --vus 10 --duration 30s tests/performance/process-endpoint.js
+# High-load test (1000 → 5000 concurrent users, ~3.5 minutes total)
+# Make sure your API and database can handle this load!
+k6 run --env BASE_URL=http://localhost:3000 --env HMAC_SECRET=test tests/performance/process-endpoint.js
+
+# Quick test with lower load (override stages for testing)
+k6 run --env BASE_URL=http://localhost:3000 --env HMAC_SECRET=test \
+  --stage 30s:10 --stage 1m:10 \
+  tests/performance/process-endpoint.js
 ```
 
 ### With Docker (recommended for CI)
@@ -50,11 +56,12 @@ Tests the `/aggregator/takehome/process` endpoint with:
 - Bet + Win in same request
 
 **Load Profile:**
-- Ramp up: 0 → 10 users over 30s
-- Sustained: 10 users for 1 minute
-- Ramp up: 10 → 50 users over 30s
-- Sustained: 50 users for 1 minute
-- Ramp down: 50 → 0 users over 30s
+- Ramp up: 0 → 1,000 users over 30s
+- Sustained: 1,000 users for 1 minute
+- Ramp up: 1,000 → 5,000 users over 30s
+- Sustained: 5,000 users for 1 minute
+- Ramp down: 5,000 → 0 users over 30s
+- **Total duration: ~3.5 minutes**
 
 **Thresholds:**
 - 95% of requests complete in < 500ms

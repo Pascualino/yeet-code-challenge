@@ -1,7 +1,7 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Rate } from 'k6/metrics';
-import crypto from 'k6/crypto';
+import { BASE_URL, ENDPOINT, createHeaders, randomUserId, randomActionId } from './utils.js';
 
 // Custom metrics
 const errorRate = new Rate('errors');
@@ -9,54 +9,17 @@ const errorRate = new Rate('errors');
 // Test configuration
 export const options = {
   stages: [
-    { duration: '30s', target: 10 }, // Ramp up to 10 users
-    { duration: '1m', target: 10 },  // Stay at 10 users
-    { duration: '30s', target: 50 }, // Ramp up to 50 users
-    { duration: '1m', target: 50 }, // Stay at 50 users
-    { duration: '30s', target: 0 },  // Ramp down
+    { duration: '10s', target: 100 },
+    { duration: '20s', target: 500 },
+    { duration: '10s', target: 100 },
+    { duration: '5s', target: 0 },
   ],
-  thresholds: {
-    http_req_duration: ['p(95)<500', 'p(99)<1000'], // 95% of requests under 500ms, 99% under 1s
-    http_req_failed: ['rate<0.01'], // Less than 1% errors
-    errors: ['rate<0.01'],
+  thresholds: { 
+    http_req_duration: ['p(95)<100', 'p(99)<200'],
+    http_req_failed: ['rate<0.005'],
+    errors: ['rate<0.005'],
   },
 };
-
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:3000';
-const ENDPOINT = '/aggregator/takehome/process';
-const HMAC_SECRET = __ENV.HMAC_SECRET || 'test';
-
-/**
- * Generate HMAC-SHA256 signature for request body
- */
-function generateHMAC(body) {
-  return crypto.hmac('sha256', HMAC_SECRET, body, 'hex');
-}
-
-/**
- * Create headers with HMAC authentication
- */
-function createHeaders(body) {
-  const hmac = generateHMAC(body);
-  return {
-    'Content-Type': 'application/json',
-    Authorization: `HMAC-SHA256 ${hmac}`,
-  };
-}
-
-/**
- * Generate a random user ID for testing
- */
-function randomUserId() {
-  return `${Math.floor(Math.random() * 1000000)}|USDT|USD`;
-}
-
-/**
- * Generate a random action ID
- */
-function randomActionId() {
-  return `${Date.now()}-${Math.random().toString(36).substring(7)}`;
-}
 
 export default function () {
   const userId = randomUserId();
