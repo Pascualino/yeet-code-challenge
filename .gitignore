@@ -31,3 +31,6 @@ lerna-debug.log*
 
 # Drizzle
 .drizzle
+
+# K6 results
+results.json

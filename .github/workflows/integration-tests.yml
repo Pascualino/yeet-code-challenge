@@ -2,10 +2,10 @@ name: Integration Tests
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
-    branches: [main, develop]
-  workflow_dispatch: # Allow manual trigger
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
   integration-tests:
