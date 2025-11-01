@@ -29,6 +29,7 @@
     "test:performance:rtp": "k6 run --env BASE_URL=http://localhost:3000 --env LOAD_PROFILE=easy tests/performance/rtp-endpoint.js",
     "test:performance:rtp:mid": "k6 run --env BASE_URL=http://localhost:3000 --env LOAD_PROFILE=mid tests/performance/rtp-endpoint.js",
     "test:performance:rtp:hard": "k6 run --env BASE_URL=http://localhost:3000 --env LOAD_PROFILE=hard tests/performance/rtp-endpoint.js",
+    "test:generate": "./scripts/run-k6.sh tests/performance/data-generator.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
