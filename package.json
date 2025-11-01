@@ -23,6 +23,7 @@
     "test:integration:ui": "playwright test --ui",
     "test:integration:headed": "playwright test --headed",
     "test:integration:report": "playwright show-report",
+    "test:performance": "k6 run --env BASE_URL=http://localhost:3000 --env HMAC_SECRET=test tests/performance/process-endpoint.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
