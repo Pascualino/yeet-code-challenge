@@ -24,6 +24,7 @@ jobs:
       DATABASE_NAME: ${{ vars.DATABASE_NAME }}
       BASE_URL: ${{ github.event.inputs.base_url || 'http://localhost:3000' }}
       HMAC_SECRET: ${{ secrets.HMAC_SECRET || 'test' }}
+      LOAD_PROFILE: ${{ github.event.inputs.load_profile || 'easy' }}
 
     steps:
       - name: Checkout code
@@ -69,13 +70,14 @@ jobs:
         run: |
           echo "🚀 Starting K6 performance test"
           echo "   BASE_URL: $BASE_URL"
-          echo "   Load profile: 1000 → 5000 concurrent users (~3.5 minutes)"
+          echo "   LOAD_PROFILE: $LOAD_PROFILE"
           echo ""
           
           docker run --rm -i --network host \
             -v $(pwd):/scripts \
             -e BASE_URL="$BASE_URL" \
             -e HMAC_SECRET="$HMAC_SECRET" \
+            -e LOAD_PROFILE="$LOAD_PROFILE" \
             grafana/k6 run \
             --out json=results.json \
             /scripts/tests/performance/process-endpoint.js

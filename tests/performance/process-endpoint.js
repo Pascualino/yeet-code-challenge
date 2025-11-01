@@ -2,28 +2,14 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Rate, Trend } from 'k6/metrics';
 import { BASE_URL, ENDPOINT, createHeaders, randomUserId, randomActionId } from './utils.js';
+import { getConfig } from './config.js';
 
 // Custom metrics
 const errorRate = new Rate('errors');
 const errorStatusTrend = new Trend('error_status');
 
-// Test configuration
-export const options = {
-  stages: [
-    { duration: '10s', target: 100 },
-    { duration: '20s', target: 500 },
-    { duration: '10s', target: 100 },
-    { duration: '5s', target: 0 },
-  ],
-  thresholds: { 
-    http_req_duration: ['p(95)<100', 'p(99)<200'],
-    http_req_failed: ['rate<0.005'],
-    errors: ['rate<0.005'],
-    'http_req_failed{status:500}': ['rate<0.01'],  // Track 500 errors separately
-    'http_req_failed{status:503}': ['rate<0.01'],  // Track 503 errors separately
-    'http_req_failed{status:429}': ['rate<0.01'],  // Track rate limit errors
-  },
-};
+// Load configuration from preset (easy/mid/hard)
+export const options = getConfig();
 
 export default function () {
   const userId = randomUserId();

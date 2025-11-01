@@ -16,23 +16,27 @@ docker pull grafana/k6
 
 ## Running Tests
 
+### Load Profiles
+
+The performance tests support three load profiles configured via `LOAD_PROFILE` environment variable:
+
+- **easy** (default): Low load - 10 → 50 concurrent users. Suitable for CI/CD environments.
+- **mid**: Medium load - 100 → 500 concurrent users. Suitable for local testing and staging.
+- **hard**: High load - 1000 → 5000 concurrent users. Stress testing and production-like scenarios.
+
 ### Local Development
 
 ```bash
-# Run process endpoint tests (uses defaults: localhost:3000, HMAC_SECRET=test)
+# Run with easy profile (default)
 npm run test:performance
 
 # Or run directly with k6
 k6 run --env BASE_URL=http://localhost:3000 --env HMAC_SECRET=test tests/performance/process-endpoint.js
 
-# High-load test (1000 → 5000 concurrent users, ~3.5 minutes total)
-# Make sure your API and database can handle this load!
-k6 run --env BASE_URL=http://localhost:3000 --env HMAC_SECRET=test tests/performance/process-endpoint.js
-
-# Quick test with lower load (override stages for testing)
-k6 run --env BASE_URL=http://localhost:3000 --env HMAC_SECRET=test \
-  --stage 30s:10 --stage 1m:10 \
-  tests/performance/process-endpoint.js
+# Run with different load profiles
+k6 run --env BASE_URL=http://localhost:3000 --env HMAC_SECRET=test --env LOAD_PROFILE=easy tests/performance/process-endpoint.js
+k6 run --env BASE_URL=http://localhost:3000 --env HMAC_SECRET=test --env LOAD_PROFILE=mid tests/performance/process-endpoint.js
+k6 run --env BASE_URL=http://localhost:3000 --env HMAC_SECRET=test --env LOAD_PROFILE=hard tests/performance/process-endpoint.js
 ```
 
 ### With Docker (recommended for CI)
@@ -55,13 +59,21 @@ Tests the `/aggregator/takehome/process` endpoint with:
 - Single bet actions
 - Bet + Win in same request
 
-**Load Profile:**
-- Ramp up: 0 → 1,000 users over 30s
-- Sustained: 1,000 users for 1 minute
-- Ramp up: 1,000 → 5,000 users over 30s
-- Sustained: 5,000 users for 1 minute
-- Ramp down: 5,000 → 0 users over 30s
-- **Total duration: ~3.5 minutes**
+**Load Profiles:**
+
+The test configuration is extracted to `config.js` with three presets:
+
+1. **Easy** (default, used in CI/CD):
+   - 10 → 50 concurrent users
+   - ~2 minutes total duration
+   
+2. **Mid**:
+   - 100 → 500 concurrent users
+   - ~3.5 minutes total duration
+
+3. **Hard**:
+   - 1,000 → 5,000 concurrent users
+   - ~3.5 minutes total duration
 
 **Thresholds:**
 - 95% of requests complete in < 500ms
@@ -76,18 +88,34 @@ K6 collects the following metrics:
 - `http_reqs`: Total requests per second
 - `errors`: Custom error rate metric
 
+## CI/CD Integration
+
+Performance tests are integrated into GitHub Actions. The workflow (`.github/workflows/performance-tests.yml`) runs:
+
+- **Manually**: Via `workflow_dispatch` (Actions tab → Performance Tests → Run workflow)
+- **On main branch**: Automatically on pushes to main branch
+
+**Note:** CI/CD uses the `easy` load profile by default due to limited resources on GitHub Actions runners. For higher load testing, run locally with `npm run test:performance:mid` or `npm run test:performance:hard`.
+
+Results are stored as artifacts and displayed in the workflow summary.
+
 ## Adjusting Load
 
-Edit the `options.stages` in the test file to change:
-- Number of virtual users (target)
-- Duration of each stage
-- Ramp-up/ramp-down patterns
+Load profiles are defined in `config.js`. To add a new profile or modify existing ones:
 
-Example for higher load:
+1. Edit `tests/performance/config.js`
+2. Add or modify a profile in the `configs` object
+3. Use it via `LOAD_PROFILE` environment variable
+
+Example:
 ```javascript
-stages: [
-  { duration: '1m', target: 100 },  // 100 concurrent users
-  { duration: '2m', target: 100 },
-],
+// In config.js
+myProfile: {
+  stages: [
+    { duration: '1m', target: 100 },
+    { duration: '2m', target: 100 },
+  ],
+  thresholds: { /* ... */ },
+}
 ```
 
