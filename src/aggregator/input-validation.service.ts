@@ -67,8 +67,9 @@ export class InputValidationService {
       throw new BadRequestException('Invalid "page" parameter: must be a positive integer');
     }
 
-    if (isNaN(limit) || limit < 1 || limit > 1000) {
-      throw new BadRequestException('Invalid "limit" parameter: must be between 1 and 1000');
+    // In a real app we'd have a higher limit parameter, but I don't wanna handle pagination from data-generator.js script for this exercise
+    if (isNaN(limit) || limit < 1) {
+      throw new BadRequestException('Invalid "limit" parameter: must be higher than 1');
     }
 
     return { from, to, page, limit };
