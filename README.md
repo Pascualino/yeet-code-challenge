@@ -100,14 +100,25 @@ On a local MacBook Pro, the system demonstrates strong performance characteristi
 - Tested with [performance/process-endpoint.js](https://github.com/Pascualino/yeet-code-challenge/blob/main/tests/performance/process-endpoint.js)
 
 **Batched requests (data generation pattern):**
-- **>30,000 actions per second** when batching ~1,000 actions per `/process` call
+- **>15,000 actions per second** when batching ~1,000 actions per `/process` call
 - In this mode, the bottleneck shifts to **payload size** rather than API processing
 - Demonstrates the system's efficiency at processing large batches atomically
 - Tested with [performance/data-generator.js](https://github.com/Pascualino/yeet-code-challenge/blob/main/tests/performance/data-generator.js)
 
 ### RTP tolerance
 
-Honestly it get pretty close to 95% RTP, I'm targeting a 0.1% tolerance which for the data-generation.js script I generally get. Easy-mode performance test has much more error margin of course, but generally get within 1%.
+Honestly it get pretty close to 95% RTP, I'm targeting a 0.1% tolerance for the data-generation.js script, and I generally get significantly more accurate. Easy-mode performance test has much more error margin of course, but generally get within 1%.
+
+### Example execution
+
+This was run over 3m30s, and produced 3575809 rows on `actions_ledger` table (so >17k actions / second). I was super lucky with the RTP probably, but yeah it's pretty accurate overall.
+```
+time="2025-11-02T15:53:48Z" level=info msg="Total Users: 3740" source=console
+time="2025-11-02T15:53:48Z" level=info msg="Total Rounds (Bets): 1958761" source=console
+time="2025-11-02T15:53:48Z" level=info msg="Total Bet: $177187168" source=console
+time="2025-11-02T15:53:48Z" level=info msg="Total Win: $168332517" source=console
+time="2025-11-02T15:53:48Z" level=info msg="RTP: 95.00%" source=console
+```
 
 ## How to reproduce
 ```bash
