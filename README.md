@@ -97,11 +97,13 @@ On a local MacBook Pro, the system demonstrates strong performance characteristi
 - **>1,000 `/process` API calls per second** sustained throughput
 - Tested with "mid" and "hard" load profiles
 - Each request contains a single action (bet or win)
+- Tested with [performance/process-endpoint.js](https://github.com/Pascualino/yeet-code-challenge/blob/main/tests/performance/process-endpoint.js)
 
 **Batched requests (data generation pattern):**
 - **>30,000 actions per second** when batching ~1,000 actions per `/process` call
 - In this mode, the bottleneck shifts to **payload size** rather than API processing
 - Demonstrates the system's efficiency at processing large batches atomically
+- Tested with [performance/data-generator.js](https://github.com/Pascualino/yeet-code-challenge/blob/main/tests/performance/data-generator.js)
 
 ## How to reproduce
 ```bash
