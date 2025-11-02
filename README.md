@@ -1,12 +1,21 @@
 Hello dear reviewer! And welcome to this window to my brain, I hope you enjoy it.
 
-## Main highlights
-
-* **Strong typing**: I've strongly typed Actions and other models. Check the discriminated union type for actions in `src/aggregator/dto/process-request.dto.ts` and the schema types in `src/database/schema.ts`
+## Things you probably wanna know
 
 * **Ledger design**: Main design consists of two tables (`balances` and `actions_ledger`) that are atomically updated. More details in the [Ledger Design](#ledger-design) section below
 
-* **Full CI pipeline**: Complete GitHub Actions pipeline including Docker spin up, integration tests, and performance tests automation. Includes DB seeds to spin up from scratch testing environments.
+* **Strong typing**: I've strongly typed Actions and other models depending on its type. You can find them in [Action types](https://github.com/Pascualino/yeet-code-challenge/blob/main/src/aggregator/types/actions.ts) and [schema](https://github.com/Pascualino/yeet-code-challenge/blob/main/src/database/schema.ts#L30)
+
+* **HMAC Authentication** is handled as a NestJs guard annotation, [HmacAuthGuard](https://github.com/Pascualino/yeet-code-challenge/blob/main/src/aggregator/hmac-auth.guard.ts)
+
+* **Functional tests** use Playwright include all scenarios provided and multiple additional more complex ones, and can be found [in the *integration* folder](https://github.com/Pascualino/yeet-code-challenge/tree/main/tests/integration). **Performance tests** use K6 with different levels of intensity, easy ones are used on the CI pipeline automation and harder ones are for stress testing. They can be found [in the *performance* folder](https://github.com/Pascualino/yeet-code-challenge/tree/main/tests/performance)
+
+* You can check the **performance results**, executed with K6, in [this section](#performance-results) and you have a [quickstart](#quick-start) allowing you to test it yourself.
+
+* **Couple of extras:**
+ * **Full CI pipeline**: Complete GitHub Actions pipeline including Docker spin up, integration tests, and performance tests automation. Includes DB seeds to spin up from scratch testing environments. Automatically executed every commit push to main, you can see it on [github commits](https://github.com/Pascualino/yeet-code-challenge/commits/main/) or an [execution example](https://github.com/Pascualino/yeet-code-challenge/actions/runs/19013825226/job/54298713486)
+ * **Couple of games to generate data, easy to add more**: I've added a couple of probabilistic games, a [really thick coin flip](https://github.com/Pascualino/yeet-code-challenge/blob/main/tests/performance/games/flippingCoin.js) and a [roulette game](https://github.com/Pascualino/yeet-code-challenge/blob/main/tests/performance/games/roulette.js) with a small probabilistic bonus to the user. Both have expected RTP 95%. More info on [random game generation](#random-games)
+
 
 ## Assumptions
 
@@ -74,17 +83,18 @@ The system handles two types of rollbacks:
 1. **Regular rollback**: Rollback of an existing action
    - Reverse the balance change from the original action
    - Record both the original action and the rollback in the ledger
+   - Rollback entry amount is the reverse of the action it refers to
 
 2. **Pre-rollback**: Rollback received before the original action
    - Record the rollback immediately (no balance change)
    - When the original action arrives later, it's detected as pre-rolled-back and has no effect on balance
    - Still generates a `tx_id` for idempotency purposes
+   - Rollback entry amount is 0, and when the action comes it's marked as amount 0 as well. This is *ahem* **super convenient** for the stats endpoints working while keeping the ledger append only (and not having to update past pre-rollback operation amounts)
 
 ### Balance Integrity
 
 * **Non-negative constraint**: Enforced at both application level (throws `InsufficientFundsException`) and database level (check constraint)
 * **Row-level locking**: Balance row is locked with `.for('update')` to prevent concurrent modifications
-* **Event sourcing**: Balance can be recalculated from `actions_ledger` at any time, making `balances` a performance optimization cache
 
 ## Quick Start
 
@@ -115,3 +125,27 @@ npm run test:integration
 # Performance tests (K6)
 LOAD_PROFILE=easy|mid|hard ./scripts/run-k6.sh
 ```
+
+## Random Games
+
+### Flipping Coin Game
+
+A "really thick coin" that can land on its edge, introducing a 2.5% skew:
+
+- **Win probability**: 47.5% chance to double the bet (2x payout)
+- **Lose probability**: 52.5% chance to lose (includes edge landings)
+- **RTP calculation**: 47.5% × 2x = **95% RTP**
+
+### Roulette Game
+
+A classic roulette with both 0 and 00, enhanced with a promotional bonus:
+
+- **Bet types**:
+  - **Number bet**: Pick a specific number (0, 00, or 1-36) → 36x payout if you win
+  - **Color bet**: Pick red or black → 2x payout if you win (loses on 0 or 00)
+- **Base RTP**: 94.74% (standard roulette with 0 and 00)
+- **Bonus**: Special promotional bonus of 0.274% on the bet amount
+- **Final RTP**: 1.00274 * 0.9474 = **94.9995% RTP**
+- **Winning amounts**: As the bonus introduces decimals and the amounts can only be integers, we round probabilistically (e.g., if the calculated win is 123.4, there's a 40% chance it rounds up to 124, 60% chance it rounds down to 123)
+
+Both games use the `CasinoGame` interface, making it easy to add more games following the same pattern.
