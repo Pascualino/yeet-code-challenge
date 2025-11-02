@@ -13,8 +13,8 @@ Hello dear reviewer! And welcome to this window to my brain, I hope you enjoy it
 * You can check the **performance results**, executed with K6, in [this section](#performance-results) and you have a [quickstart](#quick-start) allowing you to test it yourself.
 
 * **Couple of extras:**
-** **Full CI pipeline**: Complete GitHub Actions pipeline including Docker spin up, integration tests, and performance tests automation. Includes DB seeds to spin up from scratch testing environments. Automatically executed every commit push to main, you can see it on [github commits](https://github.com/Pascualino/yeet-code-challenge/commits/main/) or an [execution example](https://github.com/Pascualino/yeet-code-challenge/actions/runs/19013825226/job/54298713486)
-** **Couple of games to generate data, easy to add more**: I've added a couple of probabilistic games, a [really thick coin flip](https://github.com/Pascualino/yeet-code-challenge/blob/main/tests/performance/games/flippingCoin.js) and a [roulette game](https://github.com/Pascualino/yeet-code-challenge/blob/main/tests/performance/games/roulette.js) with a small probabilistic bonus to the user. Both have expected RTP 95%. More info on [random game generation](#random-games)
+    - **Full CI pipeline**: Complete GitHub Actions pipeline including Docker spin up, integration tests, and performance tests automation. Includes DB seeds to spin up from scratch testing environments. Automatically executed every commit push to main, you can see it on [github commits](https://github.com/Pascualino/yeet-code-challenge/commits/main/) or an [execution example](https://github.com/Pascualino/yeet-code-challenge/actions/runs/19013825226/job/54298713486)
+    - **Couple of games to generate data, easy to add more**: I've added a couple of probabilistic games, a [really thick coin flip](https://github.com/Pascualino/yeet-code-challenge/blob/main/tests/performance/games/flippingCoin.js) and a [roulette game](https://github.com/Pascualino/yeet-code-challenge/blob/main/tests/performance/games/roulette.js) with a small probabilistic bonus to the user. Both have expected RTP 95%. More info on [random game generation](#random-games)
 
 * I've included my [assumptions](#assumptions) through the challenge implementation from the provided requirements, a [future improvements](#future-improvents) section and an explicit section about [AI Usage](#ai-usage)
 
@@ -166,3 +166,11 @@ Things I'd improve or consider in a production environment:
 * **RTP calculation performance**: The current RTP calculation queries the entire `actions_ledger` table for the time range. For production at scale, if we had frequent reads, we could cache common ones or use some more complex pre-aggregated segments (hourly/daily rollups) to speed them up.
   
 * **Environment variable defaults**: Some environment variables currently have default values for local/development convenience, I'd refine them in a real environment
+
+## AI Usage
+
+So... I've definitely used AI for the challenge, and it has helped me go much faster. I've read everything that the AI has written and I've refined most of it. 
+
+Having said that, I've paid much more attention to the core parts (Controllers, ledger control, etc.) and done more manual stuff there, than on the infrastructure, automated tests, github actions set up and so on. Ah, and every other doc but this README has been mostly AI generated, as it helps the AI itself execute better. Just don't read them please.
+
+In general, in the commits that have been heavily AI generated, I've stated so in the commit description for transparency. Just wanted to clear that out :)
