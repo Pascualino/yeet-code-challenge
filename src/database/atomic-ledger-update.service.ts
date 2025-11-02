@@ -120,11 +120,9 @@ export class AtomicLedgerUpdateService {
   ): number {
     let balanceDelta = 0;
     for (const action of applicableRollbackActions) {
-      if (action.type === 'rollback') {
-        const originalAction = rolledBackedActions.find((a) => a.actionId === action.originalActionId);
-        if (originalAction) {
-          balanceDelta = originalAction.type === 'bet' ? balanceDelta + originalAction.amount! : balanceDelta - originalAction.amount!;
-        }
+      const originalAction = rolledBackedActions.find((a) => a.actionId === action.originalActionId);
+      if (originalAction) {
+        balanceDelta += originalAction.type === 'bet' ? originalAction.amount! : -originalAction.amount!;
       }
     }
     for (const action of newActions) {

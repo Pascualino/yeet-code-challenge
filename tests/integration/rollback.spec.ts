@@ -249,5 +249,207 @@ test.describe('Rollback Operations', () => {
     // Balance should be unchanged (bet was pre-rolled-back)
     expect(result.balance).toBe(10000);
   });
+
+  test('Complex cross-batch rollbacks: 3 operations with inter-batch rollbacks', async ({
+    newUserWithBalance,
+    processActions,
+  }) => {
+    const userId = await newUserWithBalance(10000);
+    
+    // Operation 1: Place bet and win
+    const bet1ActionId = generateActionId('bet');
+    const win1ActionId = generateActionId('win');
+    const result1 = await processActions({
+      user_id: userId,
+      currency: 'USD',
+      game: 'acceptance:complex',
+      game_id: 'complex-1',
+      finished: false,
+      actions: [
+        {
+          action: 'bet',
+          action_id: bet1ActionId,
+          amount: 100,
+        },
+        {
+          action: 'win',
+          action_id: win1ActionId,
+          amount: 150,
+        },
+      ],
+    });
+    
+    expect(result1.transactions).toHaveLength(2);
+    expect(result1.balance).toBe(10000 - 100 + 150); // 10050
+    
+    // Operation 2: Multiple actions including rollback for previous operation, and pre-rollback for next
+    const bet2ActionId = generateActionId('bet');
+    const win2ActionId = generateActionId('win');
+    const bet3ActionId = generateActionId('bet');
+    const rollback1ActionId = generateActionId('rollback'); // Rolls back bet1 from operation 1
+    const rollback2ActionId = generateActionId('rollback'); // Pre-rollback for bet3 (will be in operation 3)
+    
+    const result2 = await processActions({
+      user_id: userId,
+      currency: 'USD',
+      game: 'acceptance:complex',
+      game_id: 'complex-2',
+      finished: false,
+      actions: [
+        {
+          action: 'bet',
+          action_id: bet2ActionId,
+          amount: 200,
+        },
+        {
+          action: 'win',
+          action_id: win2ActionId,
+          amount: 300,
+        },
+        {
+          action: 'rollback',
+          action_id: rollback1ActionId,
+          original_action_id: bet1ActionId, // Rollback bet from operation 1
+        },
+        {
+          action: 'rollback',
+          action_id: rollback2ActionId,
+          original_action_id: bet3ActionId, // Pre-rollback for bet in operation 3
+        },
+      ],
+    });
+    
+    expect(result2.transactions).toHaveLength(4);
+    // Balance: 10050 - 200 + 300 + 100 (rollback of bet1) = 10250
+    expect(result2.balance).toBe(10250);
+    
+    // Operation 3: Actions including bet that was pre-rolled-back, and rollback for win from operation 1
+    const win3ActionId = generateActionId('win');
+    const rollback3ActionId = generateActionId('rollback'); // Rolls back win1 from operation 1
+    
+    const result3 = await processActions({
+      user_id: userId,
+      currency: 'USD',
+      game: 'acceptance:complex',
+      game_id: 'complex-3',
+      finished: true,
+      actions: [
+        {
+          action: 'bet',
+          action_id: bet3ActionId, // This was pre-rolled-back in operation 2, should not affect balance
+          amount: 50,
+        },
+        {
+          action: 'win',
+          action_id: win3ActionId,
+          amount: 75,
+        },
+        {
+          action: 'rollback',
+          action_id: rollback3ActionId,
+          original_action_id: win1ActionId, // Rollback win from operation 1
+        },
+      ],
+    });
+    
+    expect(result3.transactions).toHaveLength(3);
+    // Balance: 10250 + 75 (win3) - 150 (rollback of win1) = 10175
+    // bet3 doesn't affect balance because it was pre-rolled-back
+    expect(result3.balance).toBe(10175);
+    
+    // Verify all transactions were created with tx_ids
+    expect(result3.transactions.every(t => t.tx_id)).toBeTruthy();
+  });
+
+  test('Multiple rollbacks: 4 actions then 3 rollbacks', async ({
+    newUserWithBalance,
+    processActions,
+  }) => {
+    const userId = await newUserWithBalance(10000);
+    
+    // Operation 1: Place 4 bets/wins
+    const bet1ActionId = generateActionId('bet');
+    const win1ActionId = generateActionId('win');
+    const bet2ActionId = generateActionId('bet');
+    const win2ActionId = generateActionId('win');
+    
+    const result1 = await processActions({
+      user_id: userId,
+      currency: 'USD',
+      game: 'acceptance:multiple',
+      game_id: 'multiple-1',
+      finished: false,
+      actions: [
+        {
+          action: 'bet',
+          action_id: bet1ActionId,
+          amount: 100,
+        },
+        {
+          action: 'win',
+          action_id: win1ActionId,
+          amount: 150,
+        },
+        {
+          action: 'bet',
+          action_id: bet2ActionId,
+          amount: 200,
+        },
+        {
+          action: 'win',
+          action_id: win2ActionId,
+          amount: 250,
+        },
+      ],
+    });
+    
+    expect(result1.transactions).toHaveLength(4);
+    // Balance: 10000 - 100 + 150 - 200 + 250 = 10100
+    expect(result1.balance).toBe(10100);
+    
+    // Operation 2: Rollback 3 of the 4 actions (bet1, win1, bet2)
+    const rollback1ActionId = generateActionId('rollback'); // Rolls back bet1
+    const rollback2ActionId = generateActionId('rollback'); // Rolls back win1
+    const rollback3ActionId = generateActionId('rollback'); // Rolls back bet2
+    
+    const result2 = await processActions({
+      user_id: userId,
+      currency: 'USD',
+      game: 'acceptance:multiple',
+      game_id: 'multiple-2',
+      finished: true,
+      actions: [
+        {
+          action: 'rollback',
+          action_id: rollback1ActionId,
+          original_action_id: bet1ActionId,
+        },
+        {
+          action: 'rollback',
+          action_id: rollback2ActionId,
+          original_action_id: win1ActionId,
+        },
+        {
+          action: 'rollback',
+          action_id: rollback3ActionId,
+          original_action_id: bet2ActionId,
+        },
+      ],
+    });
+    
+    expect(result2.transactions).toHaveLength(3);
+    // Balance calculation:
+    // Operation 1: bet1(-100), win1(+150), bet2(-200), win2(+250) = net +100, balance 10100
+    // Operation 2: rollback bet1(+100), rollback win1(-150), rollback bet2(+200) = net +150
+    // Final: 10100 + 150 = 10250
+    // win2 remains because it wasn't rolled back
+    expect(result2.balance).toBe(10250);
+    
+    // Verify all transactions were created
+    expect(result2.transactions.every(t => t.tx_id)).toBeTruthy();
+    expect(result2.transactions[0].action_id).toBe(rollback1ActionId);
+    expect(result2.transactions[1].action_id).toBe(rollback2ActionId);
+    expect(result2.transactions[2].action_id).toBe(rollback3ActionId);
+  });
 });
 
