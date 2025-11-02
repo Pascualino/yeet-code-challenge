@@ -1,6 +1,7 @@
 import http from 'k6/http';
 import { BASE_URL, ENDPOINT, createHeaders, randomActionId, randomUserId } from './utils.js';
 import { FlippingCoin } from './games/flippingCoin.js';
+import { Roulette } from './games/roulette.js';
 
 export const options = {
   stages: [
@@ -25,7 +26,7 @@ export default function () {
   const initialBalance = 1000 + Math.floor(Math.random() * 10000); // $1000-11000 starting balance
   
   // Initialize game
-  const game = new FlippingCoin();
+  const game = new Roulette();
   
   // Step 1: Setup initial balance
   setupInitialBalance(userId, initialBalance);
@@ -145,7 +146,7 @@ export function teardown(data) {
       console.log(`Total Bet: $${totals.total_bet.toLocaleString()}`);
       console.log(`Total Win: $${totals.total_win.toLocaleString()}`);
       console.log(`RTP: ${rtp}%`);
-      console.log(`\nExpected RTP: ~95% (47.5% win rate × 2x payout)`);
+      console.log(`\nExpected RTP: ~95%`);
     } else {
       console.log('No data found in RTP report');
     }
