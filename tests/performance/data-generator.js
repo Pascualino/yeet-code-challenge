@@ -5,7 +5,7 @@ import { Roulette } from './games/roulette.js';
 
 export const options = {
   stages: [
-    { duration: '2m', target: 1000 },
+    { duration: '2m', target: 2000 },
     { duration: '10s', target: 0 },
   ],
   thresholds: {
@@ -26,7 +26,7 @@ export default function () {
   const initialBalance = 1000 + Math.floor(Math.random() * 10000); // $1000-11000 starting balance
   
   // Initialize game
-  const game = new Roulette();
+  const game = Math.random() < 0.5 ? new Roulette() : new FlippingCoin();
   
   // Step 1: Setup initial balance
   setupInitialBalance(userId, initialBalance);
