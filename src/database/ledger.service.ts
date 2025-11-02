@@ -99,38 +99,63 @@ export class LedgerService {
   async getCasinoWideRtp(
     from: Date,
     to: Date,
-  ): Promise<
-    Array<{
+    page: number,
+    limit: number,
+  ): Promise<{
+    data: Array<{
       user_id: string;
       currency: string;
       rounds: number;
       total_bet: number;
       total_win: number;
       rtp: number | null;
-    }>
-  > {
-      const results = await this.db
-        .select({
-          user_id: actionsLedger.userId,
-          currency: actionsLedger.currency,
-          rounds: sql<number>`CAST(COUNT(CASE WHEN ${actionsLedger.type} = 'bet' AND ${actionsLedger.amount} IS NOT NULL THEN 1 END) AS INTEGER)`,
-          total_bet: sql<string>`COALESCE(SUM(CASE WHEN ${actionsLedger.type} = 'bet' THEN ${actionsLedger.amount} ELSE 0 END), 0)::text`,
-          total_win: sql<string>`COALESCE(SUM(CASE WHEN ${actionsLedger.type} = 'win' THEN ${actionsLedger.amount} ELSE 0 END), 0)::text`,
-        })
-        .from(actionsLedger)
-        .where(
-          and(
-            between(actionsLedger.createdAt, from, to),
-            // Exclude initial balance transactions
-            or(
-              ne(actionsLedger.gameId, 'initial-balance'),
-              isNull(actionsLedger.gameId),
-            ),
-          ),
-        )
-        .groupBy(actionsLedger.userId, actionsLedger.currency);
+    }>;
+    total: number;
+  }> {
+    const offset = (page - 1) * limit;
 
-    return results.map((row) => {
+    const totalResult = await this.db
+      .select({
+        count: sql<number>`COUNT(DISTINCT ${actionsLedger.userId} || '|' || ${actionsLedger.currency})`,
+      })
+      .from(actionsLedger)
+      .where(
+        and(
+          between(actionsLedger.createdAt, from, to),
+          // Exclude initial balance transactions
+          or(
+            ne(actionsLedger.gameId, 'initial-balance'),
+            isNull(actionsLedger.gameId),
+          ),
+        ),
+      );
+
+    const total = Number(totalResult[0]?.count || 0);
+
+    const results = await this.db
+      .select({
+        user_id: actionsLedger.userId,
+        currency: actionsLedger.currency,
+        rounds: sql<number>`CAST(COUNT(CASE WHEN ${actionsLedger.type} = 'bet' AND ${actionsLedger.amount} IS NOT NULL THEN 1 END) AS INTEGER)`,
+        total_bet: sql<string>`COALESCE(SUM(CASE WHEN ${actionsLedger.type} = 'bet' THEN ${actionsLedger.amount} ELSE 0 END), 0)::text`,
+        total_win: sql<string>`COALESCE(SUM(CASE WHEN ${actionsLedger.type} = 'win' THEN ${actionsLedger.amount} ELSE 0 END), 0)::text`,
+      })
+      .from(actionsLedger)
+      .where(
+        and(
+          between(actionsLedger.createdAt, from, to),
+          // Exclude initial balance transactions
+          or(
+            ne(actionsLedger.gameId, 'initial-balance'),
+            isNull(actionsLedger.gameId),
+          ),
+        ),
+      )
+      .groupBy(actionsLedger.userId, actionsLedger.currency)
+      .limit(limit)
+      .offset(offset);
+
+    const data = results.map((row) => {
       const totalBet = Number(row.total_bet);
       const totalWin = Number(row.total_win);
       const rtp = totalBet > 0 ? totalWin / totalBet : null;
@@ -144,6 +169,8 @@ export class LedgerService {
         rtp,
       };
     });
+
+    return { data, total };
   }
 
   async getCasinoWideStats(

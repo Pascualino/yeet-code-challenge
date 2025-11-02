@@ -67,16 +67,24 @@ export class AggregatorController {
   @Get('rtp')
   @HttpCode(HttpStatus.OK)
   async getCasinoWideRtpReport(@Query() query: RtpRequestDto): Promise<RtpResponseDto> {
-    const { from, to } = this.inputValidationService.validateRtpRequest(query);
+    const { from, to, page, limit } = this.inputValidationService.validateRtpRequest(query);
 
-    const [rtpData, stats] = await Promise.all([
-      this.ledgerService.getCasinoWideRtp(from, to),
+    const [rtpResult, stats] = await Promise.all([
+      this.ledgerService.getCasinoWideRtp(from, to, page, limit),
       this.ledgerService.getCasinoWideStats(from, to),
     ]);
 
+    const totalPages = Math.ceil(rtpResult.total / limit);
+
     return {
-      data: rtpData,
+      data: rtpResult.data,
       global_stats: stats,
+      pagination: {
+        page,
+        limit,
+        total: rtpResult.total,
+        total_pages: totalPages,
+      },
     };
   }
 

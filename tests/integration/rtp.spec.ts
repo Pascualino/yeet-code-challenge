@@ -16,9 +16,8 @@ test.describe('RTP Report', () => {
     processActions,
     request,
   }) => {
-    const now = new Date();
-    const fromDate = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-    const toDate = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+    // Capture the actual test start time
+    const testStartTime = new Date();
 
     // Create first user with bets and wins
     const userId1 = await newUserWithBalance(50000);
@@ -42,6 +41,12 @@ test.describe('RTP Report', () => {
       winAmounts2,
     );
 
+    // Capture the actual test end time
+    const testEndTime = new Date();
+
+    const fromDate = testStartTime.toISOString();
+    const toDate = testEndTime.toISOString();
+
     const response = await request.get(
       `${BASE_URL}/aggregator/takehome/rtp?from=${fromDate}&to=${toDate}`,
     );
@@ -50,6 +55,7 @@ test.describe('RTP Report', () => {
 
     const body = await response.json();
     expect(body).toHaveProperty('data');
+    expect(body).toHaveProperty('pagination');
     expect(Array.isArray(body.data)).toBe(true);
 
     // Find our test users in the results
@@ -82,6 +88,8 @@ test.describe('RTP Report', () => {
     processActions,
     request,
   }) => {
+    const testStartTime = new Date();
+
     const initialBalance = 100000;
     const userId = await newUserWithBalance(initialBalance);
 
@@ -105,11 +113,12 @@ test.describe('RTP Report', () => {
       winAmounts,
     );
 
+    const testEndTime = new Date();
+
     const expectedRtp = (stats.totalWin) / stats.totalBet;
 
-    const now = new Date();
-    const fromDate = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-    const toDate = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+    const fromDate = testStartTime.toISOString();
+    const toDate = testEndTime.toISOString();
     const response = await request.get(
       `${BASE_URL}/aggregator/takehome/rtp/${encodeURIComponent(userId)}?from=${fromDate}&to=${toDate}`,
     );
@@ -319,6 +328,139 @@ test.describe('RTP Report', () => {
     expect(globalStats.total_rtp).toBeCloseTo(1320 / 1670, 5);
     expect(globalStats.total_rollback_bet).toBe(375); // Sum of absolute values of negative rollback amounts (post-rollbacks only)
     expect(globalStats.total_rollback_win).toBe(400); // Sum of positive rollback amounts (post-rollbacks only)
+    });
+  });
+
+  test.describe('Pagination', () => {
+    test('Casino-wide RTP with pagination - first page with default limit', async ({
+      newUserWithBalance,
+      processActions,
+      request,
+    }) => {
+      const testStartTime = new Date();
+
+      // Create 5 users to test pagination
+      const userIds: string[] = [];
+      for (let i = 0; i < 5; i++) {
+        const userId = await newUserWithBalance(50000);
+        userIds.push(userId);
+        await placeBetsAndWins(processActions, userId, [100, 200], [150]);
+      }
+
+      const testEndTime = new Date();
+
+      const fromDate = testStartTime.toISOString();
+      const toDate = testEndTime.toISOString();
+
+      const response = await request.get(
+        `${BASE_URL}/aggregator/takehome/rtp?from=${fromDate}&to=${toDate}&page=1&limit=2`,
+      );
+
+      expect(response.status()).toBe(200);
+      const body = await response.json();
+
+      expect(body).toHaveProperty('data');
+      expect(body).toHaveProperty('pagination');
+      expect(Array.isArray(body.data)).toBe(true);
+      
+      const pagination = body.pagination;
+      expect(pagination.page).toBe(1);
+      expect(pagination.limit).toBe(2);
+      expect(pagination.total).toBeGreaterThanOrEqual(5);
+      expect(pagination.total_pages).toBe(Math.ceil(pagination.total / 2));
+      
+      expect(body.data.length).toBeLessThanOrEqual(2);
+    });
+
+    test('Casino-wide RTP with pagination - second page', async ({
+      newUserWithBalance,
+      processActions,
+      request,
+    }) => {
+      const testStartTime = new Date();
+
+      // Create 5 users to test pagination
+      const userIds: string[] = [];
+      for (let i = 0; i < 5; i++) {
+        const userId = await newUserWithBalance(50000);
+        userIds.push(userId);
+        await placeBetsAndWins(processActions, userId, [100], [150]);
+      }
+
+      const testEndTime = new Date();
+
+      const fromDate = testStartTime.toISOString();
+      const toDate = testEndTime.toISOString();
+
+      const response = await request.get(
+        `${BASE_URL}/aggregator/takehome/rtp?from=${fromDate}&to=${toDate}&page=2&limit=2`,
+      );
+
+      expect(response.status()).toBe(200);
+      const body = await response.json();
+
+      expect(body).toHaveProperty('pagination');
+      const pagination = body.pagination;
+      expect(pagination.page).toBe(2);
+      expect(pagination.limit).toBe(2);
+      expect(body.data.length).toBeLessThanOrEqual(2);
+    });
+
+    test('Casino-wide RTP with pagination - default values (no pagination params)', async ({
+      newUserWithBalance,
+      processActions,
+      request,
+    }) => {
+      const testStartTime = new Date();
+
+      // Create 3 users
+      for (let i = 0; i < 3; i++) {
+        const userId = await newUserWithBalance(50000);
+        await placeBetsAndWins(processActions, userId, [100], [150]);
+      }
+
+      const testEndTime = new Date();
+
+      const fromDate = testStartTime.toISOString();
+      const toDate = testEndTime.toISOString();
+
+      const response = await request.get(
+        `${BASE_URL}/aggregator/takehome/rtp?from=${fromDate}&to=${toDate}`,
+      );
+
+      expect(response.status()).toBe(200);
+      const body = await response.json();
+
+      expect(body).toHaveProperty('pagination');
+      const pagination = body.pagination;
+      expect(pagination.page).toBe(1); // Default page
+      expect(pagination.limit).toBe(100); // Default limit
+      expect(pagination.total).toBeGreaterThanOrEqual(3);
+      expect(pagination.total_pages).toBe(Math.ceil(pagination.total / 100));
+    });
+
+    test('Casino-wide RTP with pagination - empty results page', async ({
+      request,
+    }) => {
+      const now = new Date();
+      const fromDate = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+      const toDate = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+
+      const response = await request.get(
+        `${BASE_URL}/aggregator/takehome/rtp?from=${fromDate}&to=${toDate}&page=999&limit=100`,
+      );
+
+      expect(response.status()).toBe(200);
+      const body = await response.json();
+
+      expect(body).toHaveProperty('pagination');
+      expect(body).toHaveProperty('data');
+      expect(Array.isArray(body.data)).toBe(true);
+      
+      const pagination = body.pagination;
+      expect(pagination.page).toBe(999);
+      expect(pagination.limit).toBe(100);
+      expect(body.data.length).toBe(0);
     });
   });
 });

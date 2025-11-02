@@ -16,8 +16,16 @@ export interface CasinoWideStats {
   total_rollback_win: number;
 }
 
+export interface PaginationMeta {
+  page: number;
+  limit: number;
+  total: number;
+  total_pages: number;
+}
+
 export interface RtpResponseDto {
   data: UserRtpDto[];
   global_stats: CasinoWideStats;
+  pagination: PaginationMeta;
 }
 

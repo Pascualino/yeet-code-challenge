@@ -36,7 +36,7 @@ export class InputValidationService {
     }
   }
 
-  validateRtpRequest(query: RtpRequestDto): { from: Date; to: Date } {
+  validateRtpRequest(query: RtpRequestDto): { from: Date; to: Date; page: number; limit: number } {
     if (!query.from || typeof query.from !== 'string' || query.from.trim().length === 0) {
       throw new BadRequestException('Missing or invalid "from" query parameter');
     }
@@ -60,7 +60,18 @@ export class InputValidationService {
       throw new BadRequestException('"from" date must be before or equal to "to" date');
     }
 
-    return { from, to };
+    const page = query.page ? parseInt(query.page) : 1;
+    const limit = query.limit ? parseInt(query.limit) : 100;
+
+    if (isNaN(page) || page < 1) {
+      throw new BadRequestException('Invalid "page" parameter: must be a positive integer');
+    }
+
+    if (isNaN(limit) || limit < 1 || limit > 1000) {
+      throw new BadRequestException('Invalid "limit" parameter: must be between 1 and 1000');
+    }
+
+    return { from, to, page, limit };
   }
 
   validateUserId(userId: string): void {
