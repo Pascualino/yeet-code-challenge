@@ -119,7 +119,8 @@ export function teardown(data) {
   console.log(`\n📊 Data generation completed at ${testEndTime}`);
   console.log(`\n🔍 Fetching RTP report for period: ${testStartTime} to ${testEndTime}\n`);
 
-  const rtpUrl = `${BASE_URL}/aggregator/takehome/rtp?from=${encodeURIComponent(testStartTime)}&to=${encodeURIComponent(testEndTime)}`;
+  const limit = 1000000000; // Basically bringing all users here
+  const rtpUrl = `${BASE_URL}/aggregator/takehome/rtp?from=${encodeURIComponent(testStartTime)}&to=${encodeURIComponent(testEndTime)}&limit=${limit}`;
   const rtpResponse = http.get(rtpUrl);
 
   if (rtpResponse.status === 200) {
