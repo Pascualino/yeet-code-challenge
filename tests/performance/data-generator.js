@@ -1,5 +1,6 @@
 import http from 'k6/http';
 import { BASE_URL, ENDPOINT, createHeaders, randomActionId, randomUserId } from './utils.js';
+import { FlippingCoin } from './games/flippingCoin.js';
 
 export const options = {
   stages: [
@@ -22,17 +23,18 @@ export default function () {
   const userId = randomUserId();
   const numGames = 900 + Math.floor(Math.random() * 101); // 900-1000 games
   const initialBalance = 1000 + Math.floor(Math.random() * 10000); // $1000-11000 starting balance
-  const betAmount = 10 + Math.floor(Math.random() * 90); // 10-100
-  const gameName = `flipping-coin-game`;
+  
+  // Initialize game
+  const game = new FlippingCoin();
   
   // Step 1: Setup initial balance
   setupInitialBalance(userId, initialBalance);
 
-  // Step 2: Generate all playing actions
-  const allActions = generatePlayingActions(numGames, betAmount, initialBalance);
+  // Step 2: Generate all playing actions using the game
+  const allActions = generatePlayingActions(game, numGames, initialBalance);
 
   // Step 3: Send all actions in a single batch request
-  callProcessEndpoint(userId, 'USD', gameName, gameName, allActions, true);
+  callProcessEndpoint(userId, 'USD', game.gameName, game.gameId, allActions, true);
 }
 
 // Helper: Call the /process endpoint
@@ -75,34 +77,34 @@ function setupInitialBalance(userId, initialBalance) {
   );
 }
 
-function generatePlayingActions(numGames, betAmount, initialBalance) {
+function generatePlayingActions(game, numGames, initialBalance) {
   const allActions = [];
   let totalBalance = initialBalance;
   
   for (let gameNum = 0; gameNum < numGames; gameNum++) {
-    if (betAmount > totalBalance) {
+    const betData = game.generateBet(totalBalance);
+    
+    if (betData.amount > totalBalance) {
       break;
     }
     
-    totalBalance -= betAmount;
+    totalBalance -= betData.amount;
     
     allActions.push({
       action: 'bet',
       action_id: randomActionId(),
-      amount: betAmount,
+      amount: betData.amount,
     });
 
-    // Determine win/loss: 47.5% chance to win, 52.5% chance to lose
-    // Expected value 47.5% * 2 = 95% RTP
-    const won = Math.random() < 0.475;
+    const winAmount = game.playGame(betData);
     
-    if (won) {
+    if (winAmount > 0) {
       allActions.push({
         action: 'win',
         action_id: randomActionId(),
-        amount: betAmount * 2,
+        amount: winAmount,
       });
-      totalBalance += betAmount * 2;
+      totalBalance += winAmount;
     }
   }
 
