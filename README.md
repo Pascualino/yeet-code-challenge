@@ -105,6 +105,10 @@ On a local MacBook Pro, the system demonstrates strong performance characteristi
 - Demonstrates the system's efficiency at processing large batches atomically
 - Tested with [performance/data-generator.js](https://github.com/Pascualino/yeet-code-challenge/blob/main/tests/performance/data-generator.js)
 
+### RTP tolerance
+
+Honestly it get pretty close to 95% RTP, I'm targeting a 0.1% tolerance which for the data-generation.js script I generally get. Easy-mode performance test has much more error margin of course, but generally get within 1%.
+
 ## How to reproduce
 ```bash
 # Set up environment
