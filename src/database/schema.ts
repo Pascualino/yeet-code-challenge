@@ -1,5 +1,6 @@
 import { pgTable, varchar, bigint, timestamp, pgEnum, check } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import { Action } from 'src/aggregator/types/actions';
 
 export const actionTypeEnum = pgEnum('action_type', ['bet', 'win', 'rollback']);
 
@@ -23,7 +24,35 @@ export const balances = pgTable('balances', {
 }));
 
 export type ActionLedgerEntry = typeof actionsLedger.$inferSelect;
-export type NewActionLedgerEntry = typeof actionsLedger.$inferInsert;
 export type Balance = typeof balances.$inferSelect;
 export type NewBalance = typeof balances.$inferInsert;
 
+export type ActionLedgerBaseFields = {
+  userId: string;
+  currency: string;
+  game?: string | null;
+  gameId?: string | null;
+};
+
+export type NewBetActionLedgerEntry = ActionLedgerBaseFields & {
+  type: 'bet';
+  actionId: string;
+  amount: number;
+  originalActionId?: never;
+};
+
+export type NewWinActionLedgerEntry = ActionLedgerBaseFields & {
+  type: 'win';
+  actionId: string;
+  amount: number;
+  originalActionId?: never;
+};
+
+export type NewRollbackActionLedgerEntry = ActionLedgerBaseFields & {
+  type: 'rollback';
+  actionId: string;
+  originalActionId: string;
+  amount?: number | null;
+};
+
+export type NewActionLedgerEntry = NewBetActionLedgerEntry | NewWinActionLedgerEntry | NewRollbackActionLedgerEntry;

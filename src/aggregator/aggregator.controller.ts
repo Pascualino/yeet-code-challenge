@@ -12,6 +12,7 @@ import {
 import { HmacAuthGuard } from './hmac-auth.guard';
 import { LedgerService } from '../database/ledger.service';
 import { InputValidationService } from './input-validation.service';
+import { mapToLedger } from '../database/utils/ledger-mapper';
 import type { ProcessRequestDto } from './dto/process-request.dto';
 import type { ProcessResponseDto } from './dto/process-response.dto';
 import type { RtpRequestDto } from './dto/rtp-request.dto';
@@ -37,16 +38,13 @@ export class AggregatorController {
       return { balance };
     }
 
-    const ledgerActions = request.actions.map((action) => ({
-      userId: request.user_id,
-      currency: request.currency,
-      type: action.action,
-      game: request.game,
-      gameId: request.game_id,
-      actionId: action.action_id,
-      ...(action.action === 'rollback' ? { originalActionId: action.original_action_id } : {}),
-      ...(action.action === 'bet' || action.action === 'win' ? { amount: action.amount } : {}),
-    }));
+    const ledgerActions = mapToLedger(
+      request.actions,
+      request.user_id,
+      request.currency,
+      request.game,
+      request.game_id,
+    );
 
     const result = await this.ledgerService.performActions(
       ledgerActions,

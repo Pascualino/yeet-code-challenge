@@ -101,7 +101,7 @@ export class AtomicLedgerUpdateService {
     const previousActionsGettingRolledBack = await tx
             .select()
             .from(actionsLedger)
-            .where(inArray(actionsLedger.actionId, currentRollbacksActions.map((a) => a.originalActionId!)));
+            .where(inArray(actionsLedger.actionId, currentRollbacksActions.map((a) => a.originalActionId)));
 
     const applicableRollbackActions = [...previousRollbacksActions, ...currentRollbacksActions];
     const rolledBackedActions = [...previousActionsGettingRolledBack, ...newActions.filter((a) => applicableRollbackActions.some((b) => b.originalActionId === a.actionId))];
@@ -132,7 +132,7 @@ export class AtomicLedgerUpdateService {
         // This is a regular rollback action, so we can apply the balance delta
         const rollbackBalanceDelta = originalAction.type === 'bet' ? originalAction.amount! : -originalAction.amount!;
         balanceDelta += rollbackBalanceDelta;
-        newActionsRollbackIfAny!.amount = rollbackBalanceDelta;
+        newActionsRollbackIfAny.amount = rollbackBalanceDelta;
       } else {
         // This is a pre-rollback action without the original action, so the rollback is noop
         newActionsRollbackIfAny!.amount = 0;
@@ -140,9 +140,9 @@ export class AtomicLedgerUpdateService {
     }
     for (const action of newActions) {
       if (action.type === 'bet') {
-        balanceDelta -= action.amount!;
+        balanceDelta -= action.amount;
       } else if (action.type === 'win') {
-        balanceDelta += action.amount!;
+        balanceDelta += action.amount;
       }
     }
     return balanceDelta;

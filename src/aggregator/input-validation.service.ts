@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
-import type { ProcessRequestDto } from './dto/process-request.dto';
+import type { ProcessRequestDto, Action } from './dto/process-request.dto';
 import type { RtpRequestDto } from './dto/rtp-request.dto';
 
 @Injectable()
