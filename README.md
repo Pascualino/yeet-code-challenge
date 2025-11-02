@@ -108,6 +108,12 @@ On a local MacBook Pro, the system demonstrates strong performance characteristi
 # Set up environment
 docker compose up -d
 
+# Install dependencies
+npm install 
+
+# Use default env
+cp default-env .env
+
 # Reset and prepare db
 npm run db:reset
 
@@ -120,9 +126,20 @@ npm run db:count
 
 ## Quick Start
 
+### Set up
+```bash
+# Install dependencies
+npm install 
+
+# Use default env
+cp default-env .env
+```
 ### Docker
 
 ```bash
+# Install dependencies
+npm install 
+
 # Start services (API + Database)
 docker compose up -d
 
