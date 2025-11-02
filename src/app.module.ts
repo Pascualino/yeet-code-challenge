@@ -1,7 +1,5 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import { AggregatorModule } from './aggregator/aggregator.module';
 import { DatabaseModule } from './database/database.module';
 import { RepositoriesModule } from './database/repositories.module';
@@ -16,7 +14,5 @@ import { RepositoriesModule } from './database/repositories.module';
     RepositoriesModule,
     AggregatorModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
 })
 export class AppModule {}
