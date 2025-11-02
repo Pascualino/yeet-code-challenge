@@ -35,7 +35,8 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed": "ts-node src/database/seed.ts",
-    "db:reset": "./scripts/reset-test-db.sh"
+    "db:reset": "./scripts/reset-test-db.sh",
+    "db:count": "docker compose exec db psql -U postgres -d yeet_casino -c \"SELECT COUNT(*) FROM actions_ledger; SELECT COUNT(*) FROM balances;\""
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

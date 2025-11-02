@@ -10,31 +10,13 @@ Hello dear reviewer! And welcome to this window to my brain, I hope you enjoy it
 
 * **Functional tests** use Playwright include all scenarios provided and multiple additional more complex ones, and can be found [in the *integration* folder](https://github.com/Pascualino/yeet-code-challenge/tree/main/tests/integration). **Performance tests** use K6 with different levels of intensity, easy ones are used on the CI pipeline automation and harder ones are for stress testing. They can be found [in the *performance* folder](https://github.com/Pascualino/yeet-code-challenge/tree/main/tests/performance)
 
-* You can check the **performance results**, executed with K6, in [this section](#performance-results) and you have a [quickstart](#quick-start) allowing you to test it yourself.
+* You can check the **performance results**, executed with K6, in [this section](#performance-results) and you have a [how to reproduce](#how-to-reproduce) allowing you to test it yourself.
 
 * **Couple of extras:**
     - **Full CI pipeline**: Complete GitHub Actions pipeline including Docker spin up, integration tests, and performance tests automation. Includes DB seeds to spin up from scratch testing environments. Automatically executed every commit push to main, you can see it on [github commits](https://github.com/Pascualino/yeet-code-challenge/commits/main/) or an [execution example](https://github.com/Pascualino/yeet-code-challenge/actions/runs/19013825226/job/54298713486)
     - **Couple of games to generate data, easy to add more**: I've added a couple of probabilistic games, a [really thick coin flip](https://github.com/Pascualino/yeet-code-challenge/blob/main/tests/performance/games/flippingCoin.js) and a [roulette game](https://github.com/Pascualino/yeet-code-challenge/blob/main/tests/performance/games/roulette.js) with a small probabilistic bonus to the user. Both have expected RTP 95%. More info on [random game generation](#random-games)
 
 * I've included my [assumptions](#assumptions) through the challenge implementation from the provided requirements, a [future improvements](#future-improvents) section and an explicit section about [AI Usage](#ai-usage)
-
-## Assumptions
-
-(These are things I'd normally ask or clarify, but here I took assumptions instead to do the work fully asynchronously)
-
-* The doc mentions "There is only a single endpoint". I've interpreted it's meant for the processing actions only, but created separate endpoints for RTP reports (`/aggregator/takehome/rtp` for casino-wide and `/aggregator/takehome/rtp/{user_id}` for per-user)
-
-* On the RTP report, I've assumed "rounds" is defined as "placed bets" actions (i.e., the total count of `bet` type actions)
-
-* On the same RTP report endpoint, if the denominator (total_bet) is 0, we return `null` for RTP
-
-* For the RTP and game simulation, I needed users to have some initial balance which was excluded from the RTP calculation. As I wanted the initial balance to be also dynamic and random, **I set up an "initial-balance" gameId value which is excluded from RTP calculations**
-
-* I've assumed we will not have a huge number of actions sent on a single `/process` endpoint call. I've therefore prioritized readability vs optimizing for large `/process` payloads
-
-* All actions in a /process call are executed at the same time. That means that even if a first "action" in a batch is a bet that would put the user under 0, but there's a win action later **in the same batch call*** that puts them above 0 again, we don't fail and it's a valid use case. Same logic applies for rollbacks that apply to actions within the same batch, regardless of the order they're never considered "pre-rollbacks".
-
-* Some fields, like *finished*, *gameId* or *currency* were kinda weird and not really used. I have my guesses of what we could use them for in a real system, but I've mostly ignored them honestly. In a real job I'd have an actual discussion with somebody about it :P
 
 ## Frameworks and tech decisions
 
@@ -99,6 +81,43 @@ The system handles two types of rollbacks:
 * **Non-negative constraint**: Enforced at both application level (throws `InsufficientFundsException`) and database level (check constraint)
 * **Row-level locking**: Balance row is locked with `.for('update')` to prevent concurrent modifications
 
+## Performance Results
+
+Performance testing results vary significantly based on the execution environment:
+
+### GitHub Actions (Easy Profile)
+
+The CI pipeline runs the "easy" load profile, which is optimized for the GitHub Actions runner capabilities. This provides basic validation that the system handles concurrent load without failures.
+
+### Local Development (MacBook Pro)
+
+On a local MacBook Pro, the system demonstrates strong performance characteristics:
+
+**Single action per request (non-batched):**
+- **>1,000 `/process` API calls per second** sustained throughput
+- Tested with "mid" and "hard" load profiles
+- Each request contains a single action (bet or win)
+
+**Batched requests (data generation pattern):**
+- **>30,000 actions per second** when batching ~1,000 actions per `/process` call
+- In this mode, the bottleneck shifts to **payload size** rather than API processing
+- Demonstrates the system's efficiency at processing large batches atomically
+
+## How to reproduce
+```bash
+# Set up environment
+docker compose up -d
+
+# Reset and prepare db
+npm run db:reset
+
+# Run data generation (Can configure load on data-generation.js -> options)
+npm run test:generate
+
+# Check the number of db rows added
+npm run db:count
+```
+
 ## Quick Start
 
 ### Docker
@@ -111,7 +130,7 @@ docker compose up -d
 docker compose logs -f api
 
 # Reset database (truncates tables and reseeds with test data)
-./scripts/reset-test-db.sh
+npm run db:reset
 
 # Stop services
 docker compose down
@@ -127,6 +146,9 @@ npm run test:integration
 
 # Performance tests (K6)
 LOAD_PROFILE=easy|mid|hard ./scripts/run-k6.sh
+
+# Data generation with random games
+npm run test:generate
 ```
 
 ## Random Games
@@ -152,6 +174,27 @@ A classic roulette with both 0 and 00, enhanced with a promotional bonus:
 - **Winning amounts**: As the bonus introduces decimals and the amounts can only be integers, we round probabilistically (e.g., if the calculated win is 123.4, there's a 40% chance it rounds up to 124, 60% chance it rounds down to 123)
 
 Both games use the `CasinoGame` interface, making it easy to add more games following the same pattern.
+
+## Assumptions
+
+(These are things I'd normally ask or clarify, but here I took assumptions instead to do the work fully asynchronously)
+
+* The doc mentions "There is only a single endpoint". I've interpreted it's meant for the processing actions only, but created separate endpoints for RTP reports (`/aggregator/takehome/rtp` for casino-wide and `/aggregator/takehome/rtp/{user_id}` for per-user)
+
+* On the RTP report, I've assumed "rounds" is defined as "placed bets" actions (i.e., the total count of `bet` type actions)
+
+* On the same RTP report endpoint, if the denominator (total_bet) is 0, we return `null` for RTP
+
+* For the RTP and game simulation, I needed users to have some initial balance which was excluded from the RTP calculation. As I wanted the initial balance to be also dynamic and random, **I set up an "initial-balance" gameId value which is excluded from RTP calculations**
+    - The alternative was to first create the users with some balance (either default to an initial balance on user first entry or pre-create with some other special endpoint), but this way allowed me to play with more numbers (initial balances, # of users, etc.)
+
+* I've assumed we will not have a huge number of actions sent on a single `/process` endpoint call. I've therefore prioritized readability vs optimizing for large `/process` payloads
+
+* All actions in a /process call are executed at the same time. That means that even if a first "action" in a batch is a bet that would put the user under 0, but there's a win action later **in the same batch call*** that puts them above 0 again, we don't fail and it's a valid use case. Same logic applies for rollbacks that apply to actions within the same batch, regardless of the order they're never considered "pre-rollbacks".
+
+* Some fields, like *finished*, *gameId* or *currency* were kinda weird and not really used. I have my guesses of what we could use them for in a real system, but I've mostly ignored them honestly. In a real job I'd have an actual discussion with somebody about it :P
+
+* Amounts are always in full dollars, we do not support cents. If we were, I'd just measure amount in cents
 
 ## Future Improvements
 
