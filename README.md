@@ -13,9 +13,10 @@ Hello dear reviewer! And welcome to this window to my brain, I hope you enjoy it
 * You can check the **performance results**, executed with K6, in [this section](#performance-results) and you have a [quickstart](#quick-start) allowing you to test it yourself.
 
 * **Couple of extras:**
- * **Full CI pipeline**: Complete GitHub Actions pipeline including Docker spin up, integration tests, and performance tests automation. Includes DB seeds to spin up from scratch testing environments. Automatically executed every commit push to main, you can see it on [github commits](https://github.com/Pascualino/yeet-code-challenge/commits/main/) or an [execution example](https://github.com/Pascualino/yeet-code-challenge/actions/runs/19013825226/job/54298713486)
- * **Couple of games to generate data, easy to add more**: I've added a couple of probabilistic games, a [really thick coin flip](https://github.com/Pascualino/yeet-code-challenge/blob/main/tests/performance/games/flippingCoin.js) and a [roulette game](https://github.com/Pascualino/yeet-code-challenge/blob/main/tests/performance/games/roulette.js) with a small probabilistic bonus to the user. Both have expected RTP 95%. More info on [random game generation](#random-games)
+** **Full CI pipeline**: Complete GitHub Actions pipeline including Docker spin up, integration tests, and performance tests automation. Includes DB seeds to spin up from scratch testing environments. Automatically executed every commit push to main, you can see it on [github commits](https://github.com/Pascualino/yeet-code-challenge/commits/main/) or an [execution example](https://github.com/Pascualino/yeet-code-challenge/actions/runs/19013825226/job/54298713486)
+** **Couple of games to generate data, easy to add more**: I've added a couple of probabilistic games, a [really thick coin flip](https://github.com/Pascualino/yeet-code-challenge/blob/main/tests/performance/games/flippingCoin.js) and a [roulette game](https://github.com/Pascualino/yeet-code-challenge/blob/main/tests/performance/games/roulette.js) with a small probabilistic bonus to the user. Both have expected RTP 95%. More info on [random game generation](#random-games)
 
+* I've included my [assumptions](#assumptions) through the challenge implementation from the provided requirements, a [future improvements](#future-improvents) section and an explicit section about [AI Usage](#ai-usage)
 
 ## Assumptions
 
@@ -27,11 +28,13 @@ Hello dear reviewer! And welcome to this window to my brain, I hope you enjoy it
 
 * On the same RTP report endpoint, if the denominator (total_bet) is 0, we return `null` for RTP
 
-* For the RTP and game simulation, I needed users to have some initial balance which was excluded from the RTP calculation. As I wanted the initial balance to be also dynamic and random, I set up an "initial-balance" gameId value which is excluded from RTP calculations
+* For the RTP and game simulation, I needed users to have some initial balance which was excluded from the RTP calculation. As I wanted the initial balance to be also dynamic and random, **I set up an "initial-balance" gameId value which is excluded from RTP calculations**
 
 * I've assumed we will not have a huge number of actions sent on a single `/process` endpoint call. I've therefore prioritized readability vs optimizing for large `/process` payloads
 
-* All actions in a /process call are executed at the same time. That means that even if a first "action" in a batch is a bet that would put the user under 0, but there's a win action later **in the same batch call*** that puts them above 0 again, we don't fail and it's a valid use case.
+* All actions in a /process call are executed at the same time. That means that even if a first "action" in a batch is a bet that would put the user under 0, but there's a win action later **in the same batch call*** that puts them above 0 again, we don't fail and it's a valid use case. Same logic applies for rollbacks that apply to actions within the same batch, regardless of the order they're never considered "pre-rollbacks".
+
+* Some fields, like *finished*, *gameId* or *currency* were kinda weird and not really used. I have my guesses of what we could use them for in a real system, but I've mostly ignored them honestly. In a real job I'd have an actual discussion with somebody about it :P
 
 ## Frameworks and tech decisions
 
@@ -149,3 +152,17 @@ A classic roulette with both 0 and 00, enhanced with a promotional bonus:
 - **Winning amounts**: As the bonus introduces decimals and the amounts can only be integers, we round probabilistically (e.g., if the calculated win is 123.4, there's a 40% chance it rounds up to 124, 60% chance it rounds down to 123)
 
 Both games use the `CasinoGame` interface, making it easy to add more games following the same pattern.
+
+## Future Improvements
+
+Things I'd improve or consider in a production environment:
+
+* **Parallelizing tests**: Some tests (like the global RTP tests) cannot run in parallel to other tests. For now, I've just disabled parallel test execution because they're super fast anyway (3-5 seconds the whole suit), but we could just run them in an independent test batch at the end.
+
+* **InputValidationService improvements**: The current validation is pretty rudimentary. For scaling, I'd probably implement framework-level validation (e.g., using class-validator decorators, Zod, or similar) to handle validation declaratively and reduce boilerplate.
+
+* **Utilize unused fields**: Fields like `currency`, `gameId`, and `finished` are currently mostly ignored.
+
+* **RTP calculation performance**: The current RTP calculation queries the entire `actions_ledger` table for the time range. For production at scale, if we had frequent reads, we could cache common ones or use some more complex pre-aggregated segments (hourly/daily rollups) to speed them up.
+  
+* **Environment variable defaults**: Some environment variables currently have default values for local/development convenience, I'd refine them in a real environment
