@@ -64,10 +64,14 @@ export class AggregatorController {
     const from = new Date(query.from);
     const to = new Date(query.to);
 
-    const rtpData = await this.ledgerService.getCasinoWideRtp(from, to);
+    const [rtpData, stats] = await Promise.all([
+      this.ledgerService.getCasinoWideRtp(from, to),
+      this.ledgerService.getCasinoWideStats(from, to),
+    ]);
 
     return {
       data: rtpData,
+      global_stats: stats,
     };
   }
 

@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, between, sql, ne, or, isNull } from 'drizzle-orm';
+import { eq, and, between, sql, ne, or, isNull, isNotNull, inArray } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DATABASE_CONNECTION } from './database.module';
 import * as schema from './schema';
@@ -144,6 +144,85 @@ export class LedgerService {
         rtp,
       };
     });
+  }
+
+  async getCasinoWideStats(
+    from: Date,
+    to: Date,
+  ): Promise<{
+    total_rounds: number;
+    total_bet: number;
+    total_win: number;
+    total_rtp: number | null;
+    total_rollback_bet: number;
+    total_rollback_win: number;
+  }> {
+    const totalsResult = await this.db
+      .select({
+        total_rounds: sql<number>`CAST(COUNT(CASE WHEN ${actionsLedger.type} = 'bet' AND ${actionsLedger.amount} IS NOT NULL THEN 1 END) AS INTEGER)`,
+        total_bet: sql<number>`COALESCE(SUM(CASE WHEN ${actionsLedger.type} = 'bet' THEN ${actionsLedger.amount} ELSE 0 END), 0)`,
+        total_win: sql<number>`COALESCE(SUM(CASE WHEN ${actionsLedger.type} = 'win' THEN ${actionsLedger.amount} ELSE 0 END), 0)`,
+      })
+      .from(actionsLedger)
+      .where(
+        and(
+          between(actionsLedger.createdAt, from, to),
+          // Exclude initial balance transactions
+          or(
+            ne(actionsLedger.gameId, 'initial-balance'),
+            isNull(actionsLedger.gameId),
+          ),
+        ),
+      )
+      .limit(1);
+
+    const totals = totalsResult[0] || {
+      total_rounds: 0,
+      total_bet: 0,
+      total_win: 0,
+    };
+
+    // Get rollback statistics: positive amounts = win rollbacks, negative amounts = bet rollbacks
+    const rollbackStatsResult = await this.db
+      .select({
+        total_rollback_bet: sql<number>`COALESCE(SUM(CASE WHEN ${actionsLedger.amount} < 0 THEN ABS(${actionsLedger.amount}) ELSE 0 END), 0)`,
+        total_rollback_win: sql<number>`COALESCE(SUM(CASE WHEN ${actionsLedger.amount} > 0 THEN ${actionsLedger.amount} ELSE 0 END), 0)`,
+      })
+      .from(actionsLedger)
+      .where(
+        and(
+          eq(actionsLedger.type, 'rollback'),
+          between(actionsLedger.createdAt, from, to),
+          isNotNull(actionsLedger.amount),
+          // Exclude initial balance transactions
+          or(
+            ne(actionsLedger.gameId, 'initial-balance'),
+            isNull(actionsLedger.gameId),
+          ),
+        ),
+      )
+      .limit(1);
+
+    const rollbackStats = rollbackStatsResult[0] || {
+      total_rollback_bet: 0,
+      total_rollback_win: 0,
+    };
+
+    const totalRollbackBet = Number(rollbackStats.total_rollback_bet);
+    const totalRollbackWin = Number(rollbackStats.total_rollback_win);
+
+    const totalBet = Number(totals.total_bet);
+    const totalWin = Number(totals.total_win);
+    const totalRtp = totalBet > 0 ? totalWin / totalBet : null;
+
+    return {
+      total_rounds: Number(totals.total_rounds),
+      total_bet: totalBet,
+      total_win: totalWin,
+      total_rtp: totalRtp,
+      total_rollback_bet: totalRollbackBet,
+      total_rollback_win: totalRollbackWin,
+    };
   }
 }
 
