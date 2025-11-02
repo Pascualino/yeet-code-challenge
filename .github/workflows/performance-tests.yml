@@ -23,7 +23,7 @@ jobs:
       DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
       DATABASE_NAME: ${{ vars.DATABASE_NAME }}
       BASE_URL: ${{ github.event.inputs.base_url || 'http://localhost:3000' }}
-      HMAC_SECRET: ${{ secrets.HMAC_SECRET || 'test' }}
+      HMAC_SECRET: ${{ secrets.HMAC_SECRET }}
       LOAD_PROFILE: ${{ github.event.inputs.load_profile || 'easy' }}
 
     steps:
