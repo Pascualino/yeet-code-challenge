@@ -32,7 +32,7 @@ export default function () {
   const allActions = generatePlayingActions(numGames, betAmount, initialBalance);
 
   // Step 3: Send all actions in a single batch request
-  callProcessEndpoint(userId, 'USD', gameName, undefined, allActions, true);
+  callProcessEndpoint(userId, 'USD', gameName, gameName, allActions, true);
 }
 
 // Helper: Call the /process endpoint
@@ -59,7 +59,6 @@ function callProcessEndpoint(userId, currency, game, gameId, actions, finished =
   return response;
 }
 
-// Helper: Calculate and send initial balance for a user
 function setupInitialBalance(userId, initialBalance) {
   callProcessEndpoint(
     userId,
@@ -76,7 +75,6 @@ function setupInitialBalance(userId, initialBalance) {
   );
 }
 
-// Helper: Generate all playing actions for a user
 function generatePlayingActions(numGames, betAmount, initialBalance) {
   const allActions = [];
   let totalBalance = initialBalance;
@@ -88,7 +86,6 @@ function generatePlayingActions(numGames, betAmount, initialBalance) {
     
     totalBalance -= betAmount;
     
-    // Always place a bet
     allActions.push({
       action: 'bet',
       action_id: randomActionId(),
@@ -96,10 +93,10 @@ function generatePlayingActions(numGames, betAmount, initialBalance) {
     });
 
     // Determine win/loss: 47.5% chance to win, 52.5% chance to lose
+    // Expected value 47.5% * 2 = 95% RTP
     const won = Math.random() < 0.475;
     
     if (won) {
-      // Win: double the bet
       allActions.push({
         action: 'win',
         action_id: randomActionId(),
@@ -119,7 +116,6 @@ export function teardown(data) {
   console.log(`\n📊 Data generation completed at ${testEndTime}`);
   console.log(`\n🔍 Fetching RTP report for period: ${testStartTime} to ${testEndTime}\n`);
 
-  // Query casino-wide RTP
   const rtpUrl = `${BASE_URL}/aggregator/takehome/rtp?from=${encodeURIComponent(testStartTime)}&to=${encodeURIComponent(testEndTime)}`;
   const rtpResponse = http.get(rtpUrl);
 
@@ -128,7 +124,6 @@ export function teardown(data) {
     
     console.log('=== Casino-Wide RTP Report ===');
     if (Array.isArray(rtpData.data) && rtpData.data.length > 0) {
-      // Aggregate across all users
       const totals = rtpData.data.reduce(
         (acc, user) => ({
           total_users: acc.total_users + 1,
