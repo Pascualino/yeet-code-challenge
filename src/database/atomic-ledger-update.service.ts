@@ -119,10 +119,23 @@ export class AtomicLedgerUpdateService {
     rolledBackedActions: Array<ActionLedgerEntry | NewActionLedgerEntry>,
   ): number {
     let balanceDelta = 0;
-    for (const action of applicableRollbackActions) {
-      const originalAction = rolledBackedActions.find((a) => a.actionId === action.originalActionId);
+    for (const rollbackAction of applicableRollbackActions) {
+      const originalAction = rolledBackedActions.find((a) => a.actionId === rollbackAction.originalActionId);
+      const newActionsRollbackIfAny = newActions.find((a) => a.actionId === rollbackAction.actionId);
+      const newActionsRolledBackIfAny = newActions.find((a) => a.actionId === rollbackAction.originalActionId);
       if (originalAction) {
-        balanceDelta += originalAction.type === 'bet' ? originalAction.amount! : -originalAction.amount!;
+        if (newActionsRollbackIfAny == null) {
+          // This is the action for an existing pre-rollback, so the action becomes noop
+          newActionsRolledBackIfAny!.amount = 0;
+          continue;
+        }
+        // This is a regular rollback action, so we can apply the balance delta
+        const rollbackBalanceDelta = originalAction.type === 'bet' ? originalAction.amount! : -originalAction.amount!;
+        balanceDelta += rollbackBalanceDelta;
+        newActionsRollbackIfAny!.amount = rollbackBalanceDelta;
+      } else {
+        // This is a pre-rollback action without the original action, so the rollback is noop
+        newActionsRollbackIfAny!.amount = 0;
       }
     }
     for (const action of newActions) {

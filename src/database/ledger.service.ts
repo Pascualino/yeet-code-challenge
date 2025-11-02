@@ -185,8 +185,8 @@ export class LedgerService {
     // Get rollback statistics: positive amounts = win rollbacks, negative amounts = bet rollbacks
     const rollbackStatsResult = await this.db
       .select({
-        total_rollback_bet: sql<number>`COALESCE(SUM(CASE WHEN ${actionsLedger.amount} < 0 THEN ABS(${actionsLedger.amount}) ELSE 0 END), 0)`,
-        total_rollback_win: sql<number>`COALESCE(SUM(CASE WHEN ${actionsLedger.amount} > 0 THEN ${actionsLedger.amount} ELSE 0 END), 0)`,
+        total_rollback_bet: sql<number>`COALESCE(SUM(CASE WHEN ${actionsLedger.amount} > 0 THEN ${actionsLedger.amount} ELSE 0 END), 0)`,
+        total_rollback_win: sql<number>`COALESCE(SUM(CASE WHEN ${actionsLedger.amount} < 0 THEN ABS(${actionsLedger.amount}) ELSE 0 END), 0)`,
       })
       .from(actionsLedger)
       .where(

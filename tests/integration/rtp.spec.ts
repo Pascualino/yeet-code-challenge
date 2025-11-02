@@ -290,29 +290,35 @@ test.describe('RTP Report', () => {
     const globalStats = body.global_stats;
 
     // Calculate expected totals (excluding initial balances, but INCLUDING rolled back actions)
+    // Note: Pre-rollbacks make subsequent actions noop (amount 0), so they don't count
+    
     // User 1 bets: 100 + 200 + 150 + 300 + 180 = 930 (all bets, including rolled back ones)
     // User 1 wins: 120 + 250 + 350 = 720 (all wins, including rolled back ones)
     
-    // User 2 bets: 150 + 175 + 125 = 450 (all bets, including pre-rolled back one)
-    // User 2 wins: 200 + 280 = 480 (all wins, including pre-rolled back one)
+    // User 2: 
+    // - futureBet2_1 (150) was pre-rolled back, so it's noop (0) - doesn't count
+    // - futureWin2_1 (200) was pre-rolled back, so it's noop (0) - doesn't count
+    // - bets: 175 + 125 = 300 (pre-rolled back bet doesn't count)
+    // - wins: 280 (pre-rolled back win doesn't count)
+    // - Pre-rollbacks themselves don't count in rollback totals (action was never processed with amount > 0)
     
     // User 3 bets: 250 + 190 = 440
     // User 3 wins: 320
 
-    // Total bets: 930 + 450 + 440 = 1820 (includes all bets, regardless of rollbacks)
-    // Total wins: 720 + 480 + 320 = 1520 (includes all wins, regardless of rollbacks)
-    // Total rounds: 5 (user1) + 3 (user2) + 2 (user3) = 10
+    // Total bets: 930 + 300 + 440 = 1670 (includes all bets except pre-rolled back ones)
+    // Total wins: 720 + 280 + 320 = 1320 (includes all wins except pre-rolled back ones)
+    // Total rounds: 5 (user1) + 2 (user2, excluding noop bet) + 2 (user3) = 9
 
-    // Rollback totals (absolute values):
-    // Rollback bets (negative amounts): 200 + 175 = 375
-    // Rollback wins (positive amounts): 120 + 280 = 400
+    // Rollback totals (only post-rollbacks, pre-rollbacks don't count):
+    // Rollback bets (negative amounts): 200 (bet1_2) + 175 (bet2_2) = 375
+    // Rollback wins (positive amounts): 120 (win1_1) + 280 (win2_2) = 400
 
     expect(globalStats.total_rounds).toBe(10);
-    expect(globalStats.total_bet).toBe(1820);
-    expect(globalStats.total_win).toBe(1520);
-    expect(globalStats.total_rtp).toBeCloseTo(1520 / 1820, 5);
-    expect(globalStats.total_rollback_bet).toBe(375); // Sum of absolute values of negative rollback amounts
-    expect(globalStats.total_rollback_win).toBe(400); // Sum of positive rollback amounts
+    expect(globalStats.total_bet).toBe(1670);
+    expect(globalStats.total_win).toBe(1320);
+    expect(globalStats.total_rtp).toBeCloseTo(1320 / 1670, 5);
+    expect(globalStats.total_rollback_bet).toBe(375); // Sum of absolute values of negative rollback amounts (post-rollbacks only)
+    expect(globalStats.total_rollback_win).toBe(400); // Sum of positive rollback amounts (post-rollbacks only)
     });
   });
 });
