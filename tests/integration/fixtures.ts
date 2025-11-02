@@ -19,7 +19,7 @@ export const test = base.extend<TestFixtures>({
         user_id: userId,
         currency: 'USD',
         game: 'fixture:setup',
-        game_id: generateActionId('fixture-setup'),
+        game_id: 'initial-balance',
         actions: [
           {
             action: 'win',

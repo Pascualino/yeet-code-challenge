@@ -61,18 +61,18 @@ test.describe('RTP Report', () => {
     expect(user1Data.currency).toBe('USD');
     expect(user1Data.rounds).toBe(stats1.rounds);
     expect(user1Data.total_bet).toBe(stats1.totalBet);
-    expect(user1Data.total_win).toBe(stats1.totalWin + 50000); // Include initial balance
+    expect(user1Data.total_win).toBe(stats1.totalWin);
 
     // Verify second user
     expect(user2Data).toBeDefined();
     expect(user2Data.currency).toBe('USD');
     expect(user2Data.rounds).toBe(stats2.rounds);
     expect(user2Data.total_bet).toBe(stats2.totalBet);
-    expect(user2Data.total_win).toBe(stats2.totalWin + 30000); // Include initial balance
+    expect(user2Data.total_win).toBe(stats2.totalWin);
 
     // Verify RTP calculations
-    const expectedRtp1 = (stats1.totalWin + 50000) / stats1.totalBet;
-    const expectedRtp2 = (stats2.totalWin + 30000) / stats2.totalBet;
+    const expectedRtp1 = (stats1.totalWin) / stats1.totalBet;
+    const expectedRtp2 = (stats2.totalWin) / stats2.totalBet;
     expect(Math.abs(user1Data.rtp - expectedRtp1)).toBeLessThan(0.00001);
     expect(Math.abs(user2Data.rtp - expectedRtp2)).toBeLessThan(0.00001);
   });
@@ -105,7 +105,7 @@ test.describe('RTP Report', () => {
       winAmounts,
     );
 
-    const expectedRtp = (stats.totalWin + initialBalance) / stats.totalBet;
+    const expectedRtp = (stats.totalWin) / stats.totalBet;
 
     const now = new Date();
     const fromDate = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
@@ -121,8 +121,199 @@ test.describe('RTP Report', () => {
     expect(rtpData.currency).toBe('USD');
     expect(rtpData.rounds).toBe(stats.rounds);
     expect(rtpData.total_bet).toBe(stats.totalBet);
-    expect(rtpData.total_win).toBe(stats.totalWin + initialBalance);
+    expect(rtpData.total_win).toBe(stats.totalWin);
     expect(Math.abs(rtpData.rtp - expectedRtp)).toBeLessThan(0.00001);
+  });
+
+  test.describe('Global stats with rollbacks', () => {
+    test('Complex scenario with pre and post rollbacks', async ({
+    newUserWithBalance,
+    processActions,
+    request,
+  }) => {
+    // Capture the actual test start time
+    const testStartTime = new Date();
+
+    // Create multiple users for a realistic casino-wide scenario
+    const userId1 = await newUserWithBalance(50000);
+    const userId2 = await newUserWithBalance(30000);
+    const userId3 = await newUserWithBalance(40000);
+
+    // User 1: Multiple bets/wins with post-rollbacks
+    // Operation 1: 3 bets, 2 wins
+    const bet1_1 = generateActionId('user1-bet1-1');
+    const bet1_2 = generateActionId('user1-bet1-2');
+    const bet1_3 = generateActionId('user1-bet1-3');
+    const win1_1 = generateActionId('user1-win1-1');
+    const win1_2 = generateActionId('user1-win1-2');
+
+    await processActions({
+      user_id: userId1,
+      currency: 'USD',
+      game: 'test:rtp-rollback',
+      game_id: 'rtp-test-game-1',
+      actions: [
+        { action: 'bet', action_id: bet1_1, amount: 100 },
+        { action: 'bet', action_id: bet1_2, amount: 200 },
+        { action: 'bet', action_id: bet1_3, amount: 150 },
+        { action: 'win', action_id: win1_1, amount: 120 },
+        { action: 'win', action_id: win1_2, amount: 250 },
+      ],
+    });
+
+    // Operation 2: Rollback one bet and one win (post-rollbacks)
+    const rollback1_1 = generateActionId('user1-rollback1-1'); // Rollback bet1_2 (200)
+    const rollback1_2 = generateActionId('user1-rollback1-2'); // Rollback win1_1 (120)
+
+    await processActions({
+      user_id: userId1,
+      currency: 'USD',
+      game: 'test:rtp-rollback',
+      game_id: 'rtp-test-game-1',
+      actions: [
+        { action: 'rollback', action_id: rollback1_1, original_action_id: bet1_2 },
+        { action: 'rollback', action_id: rollback1_2, original_action_id: win1_1 },
+      ],
+    });
+
+    // Operation 3: More bets and wins
+    const bet1_4 = generateActionId('user1-bet1-4');
+    const bet1_5 = generateActionId('user1-bet1-5');
+    const win1_3 = generateActionId('user1-win1-3');
+
+    await processActions({
+      user_id: userId1,
+      currency: 'USD',
+      game: 'test:rtp-rollback',
+      game_id: 'rtp-test-game-1',
+      actions: [
+        { action: 'bet', action_id: bet1_4, amount: 300 },
+        { action: 'bet', action_id: bet1_5, amount: 180 },
+        { action: 'win', action_id: win1_3, amount: 350 },
+      ],
+    });
+
+    // User 2: Pre-rollbacks and bets/wins
+    // Operation 1: Pre-rollback for a future bet and win
+    const preRollbackBet2 = generateActionId('user2-prerollback-bet');
+    const preRollbackWin2 = generateActionId('user2-prerollback-win');
+    const futureBet2_1 = generateActionId('user2-bet2-1');
+    const futureWin2_1 = generateActionId('user2-win2-1');
+
+    await processActions({
+      user_id: userId2,
+      currency: 'USD',
+      game: 'test:rtp-rollback',
+      game_id: 'rtp-test-game-2',
+      actions: [
+        { action: 'rollback', action_id: preRollbackBet2, original_action_id: futureBet2_1 },
+        { action: 'rollback', action_id: preRollbackWin2, original_action_id: futureWin2_1 },
+      ],
+    });
+
+    // Operation 2: The bets/wins that were pre-rolled back
+    await processActions({
+      user_id: userId2,
+      currency: 'USD',
+      game: 'test:rtp-rollback',
+      game_id: 'rtp-test-game-2',
+      actions: [
+        { action: 'bet', action_id: futureBet2_1, amount: 150 }, // Pre-rolled back
+        { action: 'win', action_id: futureWin2_1, amount: 200 }, // Pre-rolled back
+      ],
+    });
+
+    // Operation 3: Regular bets and wins
+    const bet2_2 = generateActionId('user2-bet2-2');
+    const bet2_3 = generateActionId('user2-bet2-3');
+    const win2_2 = generateActionId('user2-win2-2');
+
+    await processActions({
+      user_id: userId2,
+      currency: 'USD',
+      game: 'test:rtp-rollback',
+      game_id: 'rtp-test-game-2',
+      actions: [
+        { action: 'bet', action_id: bet2_2, amount: 175 },
+        { action: 'bet', action_id: bet2_3, amount: 125 },
+        { action: 'win', action_id: win2_2, amount: 280 },
+      ],
+    });
+
+    // Operation 4: Rollback some actions (post-rollbacks)
+    const rollback2_1 = generateActionId('user2-rollback2-1'); // Rollback bet2_2 (175)
+    const rollback2_2 = generateActionId('user2-rollback2-2'); // Rollback win2_2 (280)
+
+    await processActions({
+      user_id: userId2,
+      currency: 'USD',
+      game: 'test:rtp-rollback',
+      game_id: 'rtp-test-game-2',
+      actions: [
+        { action: 'rollback', action_id: rollback2_1, original_action_id: bet2_2 },
+        { action: 'rollback', action_id: rollback2_2, original_action_id: win2_2 },
+      ],
+    });
+
+    // User 3: Mix of bets, wins, and rollbacks in same batch
+    const bet3_1 = generateActionId('user3-bet3-1');
+    const bet3_2 = generateActionId('user3-bet3-2');
+    const win3_1 = generateActionId('user3-win3-1');
+
+    await processActions({
+      user_id: userId3,
+      currency: 'USD',
+      game: 'test:rtp-rollback',
+      game_id: 'rtp-test-game-3',
+      actions: [
+        { action: 'bet', action_id: bet3_1, amount: 250 },
+        { action: 'bet', action_id: bet3_2, amount: 190 },
+        { action: 'win', action_id: win3_1, amount: 320 },
+      ],
+    });
+
+    // Capture the actual test end time
+    const testEndTime = new Date();
+
+    // Now get the RTP report with global_stats using actual test time range
+    const fromDate = testStartTime.toISOString();
+    const toDate = testEndTime.toISOString();
+    const response = await request.get(
+      `${BASE_URL}/aggregator/takehome/rtp?from=${fromDate}&to=${toDate}`,
+    );
+
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+
+    // Verify global_stats exists
+    expect(body).toHaveProperty('global_stats');
+    const globalStats = body.global_stats;
+
+    // Calculate expected totals (excluding initial balances, but INCLUDING rolled back actions)
+    // User 1 bets: 100 + 200 + 150 + 300 + 180 = 930 (all bets, including rolled back ones)
+    // User 1 wins: 120 + 250 + 350 = 720 (all wins, including rolled back ones)
+    
+    // User 2 bets: 150 + 175 + 125 = 450 (all bets, including pre-rolled back one)
+    // User 2 wins: 200 + 280 = 480 (all wins, including pre-rolled back one)
+    
+    // User 3 bets: 250 + 190 = 440
+    // User 3 wins: 320
+
+    // Total bets: 930 + 450 + 440 = 1820 (includes all bets, regardless of rollbacks)
+    // Total wins: 720 + 480 + 320 = 1520 (includes all wins, regardless of rollbacks)
+    // Total rounds: 5 (user1) + 3 (user2) + 2 (user3) = 10
+
+    // Rollback totals (absolute values):
+    // Rollback bets (negative amounts): 200 + 175 = 375
+    // Rollback wins (positive amounts): 120 + 280 = 400
+
+    expect(globalStats.total_rounds).toBe(10);
+    expect(globalStats.total_bet).toBe(1820);
+    expect(globalStats.total_win).toBe(1520);
+    expect(globalStats.total_rtp).toBeCloseTo(1520 / 1820, 5);
+    expect(globalStats.total_rollback_bet).toBe(375); // Sum of absolute values of negative rollback amounts
+    expect(globalStats.total_rollback_win).toBe(400); // Sum of positive rollback amounts
+    });
   });
 });
 
