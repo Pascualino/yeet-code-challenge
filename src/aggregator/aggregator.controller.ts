@@ -12,6 +12,7 @@ import {
 import * as crypto from 'crypto';
 import { HmacAuthGuard } from './hmac-auth.guard';
 import { LedgerService } from '../database/ledger.service';
+import { InputValidationService } from './input-validation.service';
 import type { ProcessRequestDto } from './dto/process-request.dto';
 import type { ProcessResponseDto } from './dto/process-response.dto';
 import type { RtpRequestDto } from './dto/rtp-request.dto';
@@ -19,12 +20,17 @@ import type { RtpResponseDto, UserRtpDto } from './dto/rtp-response.dto';
 
 @Controller('aggregator/takehome')
 export class AggregatorController {
-  constructor(private readonly ledgerService: LedgerService) {}
+  constructor(
+    private readonly ledgerService: LedgerService,
+    private readonly inputValidationService: InputValidationService,
+  ) {}
 
   @Post('process')
   @HttpCode(HttpStatus.OK)
   @UseGuards(HmacAuthGuard)
   async process(@Body() request: ProcessRequestDto): Promise<ProcessResponseDto> {
+    this.inputValidationService.validateProcessRequest(request);
+
     if (!request.actions || request.actions.length === 0) {
       const balance = await this.ledgerService.getCurrentBalance(
         request.user_id,
@@ -61,8 +67,7 @@ export class AggregatorController {
   @Get('rtp')
   @HttpCode(HttpStatus.OK)
   async getCasinoWideRtpReport(@Query() query: RtpRequestDto): Promise<RtpResponseDto> {
-    const from = new Date(query.from);
-    const to = new Date(query.to);
+    const { from, to } = this.inputValidationService.validateRtpRequest(query);
 
     const [rtpData, stats] = await Promise.all([
       this.ledgerService.getCasinoWideRtp(from, to),
@@ -81,8 +86,8 @@ export class AggregatorController {
     @Param('user_id') userId: string,
     @Query() query: RtpRequestDto,
   ): Promise<UserRtpDto> {
-    const from = new Date(query.from);
-    const to = new Date(query.to);
+    this.inputValidationService.validateUserId(userId);
+    const { from, to } = this.inputValidationService.validateRtpRequest(query);
 
     return await this.ledgerService.getUserRtp(userId, from, to);
   }

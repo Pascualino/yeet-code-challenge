@@ -82,5 +82,55 @@ test.describe('Error Handling', () => {
     
     expect(response.status()).toBe(404);
   });
+
+  test('400 Bad Request - Missing user_id in process request', async ({ request }) => {
+    const body = JSON.stringify({
+      currency: 'USD',
+      game: 'test',
+      actions: [],
+    });
+
+    const response = await request.post(`${BASE_URL}${ENDPOINT}`, {
+      headers: createHeaders(body),
+      data: body,
+    });
+
+    expect(response.status()).toBe(400);
+    const responseBody = await response.json();
+    expect(responseBody.message).toContain('user_id');
+  });
+
+  test('400 Bad Request - Invalid action: bet without amount', async ({ request }) => {
+    const body = JSON.stringify({
+      user_id: 'test-user',
+      currency: 'USD',
+      game: 'test',
+      game_id: 'test-game',
+      actions: [
+        {
+          action: 'bet',
+          action_id: generateActionId('bet'),
+          // Missing amount
+        },
+      ],
+    });
+
+    const response = await request.post(`${BASE_URL}${ENDPOINT}`, {
+      headers: createHeaders(body),
+      data: body,
+    });
+
+    expect(response.status()).toBe(400);
+    const responseBody = await response.json();
+    expect(responseBody.message).toContain('amount');
+  });
+
+  test('400 Bad Request - RTP endpoint: missing from parameter', async ({ request }) => {
+    const response = await request.get(`${BASE_URL}/aggregator/takehome/rtp?to=2024-01-02T00:00:00Z`);
+    
+    expect(response.status()).toBe(400);
+    const responseBody = await response.json();
+    expect(responseBody.message).toContain('from');
+  });
 });
 
