@@ -9,7 +9,6 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
-import * as crypto from 'crypto';
 import { HmacAuthGuard } from './hmac-auth.guard';
 import { LedgerService } from '../database/ledger.service';
 import { InputValidationService } from './input-validation.service';
@@ -39,7 +38,6 @@ export class AggregatorController {
     }
 
     const ledgerActions = request.actions.map((action) => ({
-      id: crypto.randomUUID(),
       userId: request.user_id,
       currency: request.currency,
       type: action.action,
@@ -58,7 +56,7 @@ export class AggregatorController {
       game_id: request.game_id!,
       transactions: result.actions.map((action) => ({
         action_id: action.actionId,
-        tx_id: action.id,
+        tx_id: action.actionId,
       })),
       balance: result.balance.balance,
     };

@@ -3,7 +3,7 @@
 echo "🔄 Resetting test database..."
 
 # Drop all data from tables
-docker exec yeet-casino-db psql -U postgres -d yeet_casino -c "TRUNCATE TABLE actions_ledger, balances CASCADE;"
+docker exec yeet-casino-db psql -U postgres -d yeet_casino -c "DROP TABLE actions_ledger, balances CASCADE;"
 
 echo "✨ Database cleared"
 

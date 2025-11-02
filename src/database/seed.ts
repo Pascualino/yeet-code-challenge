@@ -1,7 +1,6 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as dotenv from 'dotenv';
-import { randomUUID } from 'crypto';
 import { actionsLedger, balances } from './schema';
 
 dotenv.config();
@@ -18,7 +17,6 @@ async function seed() {
   const db = drizzle(pool);
 
   await db.insert(actionsLedger).values({
-    id: randomUUID(),
     userId: '8|USDT|USD',
     currency: 'USD',
     amount: 74322001,
