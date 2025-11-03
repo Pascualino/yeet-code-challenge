@@ -119,38 +119,22 @@ export function teardown(data) {
   console.log(`\n📊 Data generation completed at ${testEndTime}`);
   console.log(`\n🔍 Fetching RTP report for period: ${testStartTime} to ${testEndTime}\n`);
 
-  const limit = 1000000000; // Basically bringing all users here
-  const rtpUrl = `${BASE_URL}/aggregator/takehome/rtp?from=${encodeURIComponent(testStartTime)}&to=${encodeURIComponent(testEndTime)}&limit=${limit}`;
+  const rtpUrl = `${BASE_URL}/aggregator/takehome/rtp?from=${encodeURIComponent(testStartTime)}&to=${encodeURIComponent(testEndTime)}`;
   const rtpResponse = http.get(rtpUrl);
 
   if (rtpResponse.status === 200) {
     const rtpData = JSON.parse(rtpResponse.body);
     
-    console.log('=== Casino-Wide RTP Report ===');
-    if (Array.isArray(rtpData.data) && rtpData.data.length > 0) {
-      const totals = rtpData.data.reduce(
-        (acc, user) => ({
-          total_users: acc.total_users + 1,
-          total_rounds: acc.total_rounds + user.rounds,
-          total_bet: acc.total_bet + user.total_bet,
-          total_win: acc.total_win + user.total_win,
-        }),
-        { total_users: 0, total_rounds: 0, total_bet: 0, total_win: 0 }
-      );
+    console.log('=== Casino-Wide RTP Report (Global Stats) ===');
+    const gs = rtpData.global_stats;
 
-      const rtp = totals.total_bet > 0 
-        ? ((totals.total_win / totals.total_bet) * 100).toFixed(2)
-        : 'N/A';
-
-      console.log(`Total Users: ${totals.total_users}`);
-      console.log(`Total Rounds (Bets): ${totals.total_rounds}`);
-      console.log(`Total Bet: $${totals.total_bet.toLocaleString()}`);
-      console.log(`Total Win: $${totals.total_win.toLocaleString()}`);
-      console.log(`RTP: ${rtp}%`);
-      console.log(`\nExpected RTP: ~95%`);
-    } else {
-      console.log('No data found in RTP report');
-    }
+    console.log(`Total Rounds (Bets): ${gs.total_rounds}`);
+    console.log(`Total Bet: $${gs.total_bet.toLocaleString()}`);
+    console.log(`Total Win: $${gs.total_win.toLocaleString()}`);
+    console.log(`RTP: ${gs.total_rtp ? (gs.total_rtp * 100).toFixed(2) : 'N/A'}%`);
+    console.log(`Expected RTP: ~95%`);
+    console.log(`Rollback Bet Total: $${gs.total_rollback_bet.toLocaleString()}`);
+    console.log(`Rollback Win Total: $${gs.total_rollback_win.toLocaleString()}`);
   } else {
     console.error(`Failed to fetch RTP report: ${rtpResponse.status}`);
     console.error(rtpResponse.body);
